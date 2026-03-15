@@ -65,10 +65,10 @@ The output filename is auto-generated from the document title unless
 		// Fetch file metadata.
 		spin := progress.NewSpinner("Fetching file metadata...")
 		spin.Start()
+		defer spin.Stop()
 
 		metadata, err := api.GetFileMetadata(svc, fileID)
 		if err != nil {
-			spin.Stop()
 			return output.Errorf("Failed to get file metadata: %s", err)
 		}
 		config.DebugLog("File: %s (MIME: %s)", metadata.Name, metadata.MimeType)
@@ -76,7 +76,6 @@ The output filename is auto-generated from the document title unless
 		// Determine export format.
 		exportMIME, ok := formatting.GetExportMIME(metadata.MimeType)
 		if !ok {
-			spin.Stop()
 			return output.Errorf(
 				"Unsupported file type: %s\n\nSupported types:\n"+
 					"  Google Doc    (application/vnd.google-apps.document)\n"+
@@ -103,7 +102,6 @@ The output filename is auto-generated from the document title unless
 		spin.UpdateMessage("Downloading " + metadata.Name + "...")
 
 		if err := api.ExportFile(svc, fileID, exportMIME, outputPath); err != nil {
-			spin.Stop()
 			return output.Errorf("Failed to export file: %s", err)
 		}
 
