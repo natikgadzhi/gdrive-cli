@@ -1,6 +1,6 @@
 # gdrive-cli
 
-A command-line tool to search and download Google Docs, Sheets, and Slides via the Google Drive API. All output is JSON to stdout; debug logs go to stderr.
+A command-line tool to search and download Google Docs, Sheets, and Slides via the Google Drive API. All output is JSON (default) or Markdown to stdout; debug logs go to stderr.
 
 ## Setup
 
@@ -22,10 +22,22 @@ The tool uses the `drive.readonly` scope only.
 
 ### 2. Install
 
+**Homebrew:**
+
 ```sh
-pip install -e .
-# or with uv
-uv pip install -e .
+brew install natikgadzhi/taps/gdrive-cli
+```
+
+**From source:**
+
+```sh
+go install github.com/natikgadzhi/gdrive-cli/cmd/gdrive-cli@latest
+```
+
+**Or build from a local checkout:**
+
+```sh
+go build -o bin/gdrive-cli ./cmd/gdrive-cli
 ```
 
 ### 3. Authenticate
@@ -41,12 +53,13 @@ Opens a browser for Google OAuth consent. On success, saves a token to `~/.confi
 ## Global flags
 
 ```
-gdrive-cli [--debug] <command>
+gdrive-cli [--debug] [--format json|markdown] <command>
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--debug` | Print verbose debug logs to stderr |
+| `--format` | Output format: `json` (default) or `markdown` |
 
 ---
 
@@ -58,7 +71,7 @@ gdrive-cli [--debug] <command>
 gdrive-cli auth login
 ```
 
-Runs the OAuth2 installed-app flow. Opens a browser; starts a local WSGI server on `localhost:8085` to receive the redirect. Saves credentials to `token.json`.
+Runs the OAuth2 installed-app flow. Opens a browser for Google consent and saves credentials locally.
 
 **Output:**
 ```json
@@ -66,10 +79,8 @@ Runs the OAuth2 installed-app flow. Opens a browser; starts a local WSGI server 
 ```
 
 **Errors:**
-- `credentials.json` not found → prints path and Google Cloud console link
-- `credentials.json` is for a Web application client (not Desktop) → tells you to create a Desktop app client
-- Port 8085 already in use → raises error with OS message
-- No OAuth callback received after 20 requests → raises error
+- `credentials.json` not found -- prints path and Google Cloud console link
+- `credentials.json` is for a Web application client (not Desktop) -- tells you to create a Desktop app client
 
 ---
 
@@ -96,7 +107,7 @@ Checks whether stored credentials exist and are valid (or refreshable).
 ### `search`
 
 ```sh
-gdrive-cli search <query> [--count N]
+gdrive-cli search <query> [--count N] [--format json|markdown]
 ```
 
 Searches Google Drive for Docs, Sheets, and Slides matching `query`. Matches on both file name and full text content. Results are ordered by `modifiedTime desc`.
@@ -105,8 +116,9 @@ Searches Google Drive for Docs, Sheets, and Slides matching `query`. Matches on 
 |---|---|---|
 | `query` | required | Search string |
 | `--count` / `-n` | `20` | Max results to return |
+| `--format` | `json` | Output format: `json` or `markdown` |
 
-**Output:**
+**JSON output:**
 ```json
 {
   "query": "budget 2025",
@@ -122,8 +134,12 @@ Searches Google Drive for Docs, Sheets, and Slides matching `query`. Matches on 
 }
 ```
 
+**Markdown output** (`--format markdown`):
+
+Prints a heading with the query, result count, and a Markdown table of results.
+
 **Notes:**
-- Only returns Docs, Sheets, and Slides — no other Drive files.
+- Only returns Docs, Sheets, and Slides -- no other Drive files.
 - Single quotes in `query` are escaped for the Drive API query syntax.
 - `--count` maps to `pageSize` in the Drive API; the API may return fewer results than requested.
 
@@ -132,7 +148,7 @@ Searches Google Drive for Docs, Sheets, and Slides matching `query`. Matches on 
 ### `fetch`
 
 ```sh
-gdrive-cli fetch <url> [--output FILE] [--dir DIR]
+gdrive-cli fetch <url> [--output FILE] [--dir DIR] [--format json|markdown]
 ```
 
 Downloads a Google Doc, Sheet, or Slides file and saves it locally.
@@ -142,6 +158,7 @@ Downloads a Google Doc, Sheet, or Slides file and saves it locally.
 | `url` | required | Full Google Docs/Sheets/Slides URL |
 | `--output` / `-o` | auto-generated | Explicit output file path |
 | `--dir` / `-d` | `.` (current dir) | Output directory (used when `--output` is not set) |
+| `--format` | `json` | Output format: `json` or `markdown` |
 
 **Export formats:**
 
@@ -162,21 +179,41 @@ https://docs.google.com/presentation/d/<ID>/...
 
 URL-encoded characters are decoded before ID extraction.
 
-**Output:**
+**JSON output:**
 ```json
 {
   "status": "ok",
   "file_id": "1aBcDe...",
   "name": "Q1 Budget",
   "type": "Google Sheet",
-  "saved_to": "./Q1_Budget.csv"
+  "saved_to": "./Q1_Budget.csv",
+  "cached_to": "~/.local/share/gdrive-cli/cache/q1-budget-1aBcDe.md"
 }
 ```
 
+**Markdown output** (`--format markdown`):
+
+Prints the document content as Markdown with YAML frontmatter containing file metadata. The file is also saved locally in its native format (docx/csv/pptx).
+
 **Errors:**
-- Unrecognized URL format → lists supported formats
-- Unsupported MIME type (e.g., a plain Drive file, not a Workspace doc) → lists supported types
+- Unrecognized URL format -- lists supported formats
+- Unsupported MIME type (e.g., a plain Drive file, not a Workspace doc) -- lists supported types
 - Output directory is created automatically if it does not exist
+
+---
+
+### `version`
+
+```sh
+gdrive-cli version
+```
+
+Prints version, commit, and build date information.
+
+**Output:**
+```json
+{ "version": "0.1.0", "commit": "abc1234", "date": "2025-01-01T00:00:00Z" }
+```
 
 ---
 
@@ -187,3 +224,5 @@ URL-encoded characters are decoded before ID extraction.
 | `~/.config/gdrive-cli/credentials.json` | OAuth client credentials (you provide) |
 | `~/.config/gdrive-cli/token.json` | OAuth token (written after login) |
 | `$GDRIVE_CONFIG_DIR` | Override for the config directory |
+| `~/.local/share/gdrive-cli/cache/` | Cached Markdown exports of fetched documents |
+| `$GDRIVE_CACHE_DIR` | Override for the cache directory |

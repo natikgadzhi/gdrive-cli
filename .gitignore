@@ -1,14 +1,3 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
 # Go
 bin/
 vendor/
@@ -24,6 +13,9 @@ vendor/
 # Go workspace
 go.work
 go.work.sum
+
+# Build artifacts
+dist/
 
 # OS files
 .DS_Store
