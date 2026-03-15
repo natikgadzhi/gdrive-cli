@@ -33,11 +33,17 @@ func ExportFile(svc *drive.Service, fileID string, mimeType string, outputPath s
 	if err != nil {
 		return fmt.Errorf("failed to create output file %s: %w", outputPath, err)
 	}
-	defer outFile.Close()
 
 	n, err := io.Copy(outFile, resp.Body)
 	if err != nil {
+		outFile.Close()
+		os.Remove(outputPath)
 		return fmt.Errorf("failed to write export data: %w", err)
+	}
+
+	if err := outFile.Close(); err != nil {
+		os.Remove(outputPath)
+		return fmt.Errorf("closing export file: %w", err)
 	}
 
 	config.DebugLog("Wrote %d bytes to %s", n, outputPath)
