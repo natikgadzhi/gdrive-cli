@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/natikgadzhi/gdrive-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +22,7 @@ var rootCmd = &cobra.Command{
 	Short: "CLI tool for Google Drive",
 	Long:  "A command-line tool to search and download Google Docs, Sheets, and Slides via the Google Drive API.",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		config.SetDebug(debug)
 		if format != "json" && format != "markdown" {
 			return fmt.Errorf("invalid format %q: must be \"json\" or \"markdown\"", format)
 		}
