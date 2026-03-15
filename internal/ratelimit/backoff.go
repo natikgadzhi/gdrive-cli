@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"io"
 	"math"
 	"math/rand"
 	"net/http"
@@ -77,6 +78,9 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		// Drain and close the 429 response body before retrying.
+		// Draining allows the underlying TCP connection to be reused
+		// by the HTTP keep-alive mechanism.
+		io.Copy(io.Discard, resp.Body) //nolint:errcheck // best-effort drain
 		resp.Body.Close()
 
 		delay := t.backoffDelay(attempt, resp.Header)
@@ -109,7 +113,11 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func (t *RetryTransport) backoffDelay(attempt int, header http.Header) time.Duration {
 	if ra := header.Get("Retry-After"); ra != "" {
 		if d := parseRetryAfter(ra); d > 0 {
-			config.DebugLog("rate limit: using Retry-After value: %s", d)
+			// Add +-10% jitter to Retry-After to prevent thundering
+			// herd when multiple clients receive the same value.
+			jitter := float64(d) * 0.10 * (rand.Float64()*2 - 1) //nolint:gosec // jitter does not need crypto rand
+			d += time.Duration(jitter)
+			config.DebugLog("rate limit: using Retry-After value (with jitter): %s", d)
 			return d
 		}
 	}

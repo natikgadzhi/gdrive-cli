@@ -214,8 +214,12 @@ func TestRetryTransport_RetryAfterSeconds(t *testing.T) {
 	if len(sleepDurations) != 1 {
 		t.Fatalf("expected 1 sleep, got %d", len(sleepDurations))
 	}
-	if sleepDurations[0] != 3*time.Second {
-		t.Fatalf("expected 3s sleep from Retry-After, got %s", sleepDurations[0])
+	// Retry-After of 3s should produce a delay of 3s +-10% jitter.
+	base := float64(3 * time.Second)
+	lo := time.Duration(base * 0.89)
+	hi := time.Duration(base * 1.11)
+	if sleepDurations[0] < lo || sleepDurations[0] > hi {
+		t.Fatalf("expected sleep in [%s, %s] from Retry-After with jitter, got %s", lo, hi, sleepDurations[0])
 	}
 }
 
