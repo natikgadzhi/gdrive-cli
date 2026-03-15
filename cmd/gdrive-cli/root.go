@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
+	"github.com/natikgadzhi/gdrive-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +29,7 @@ var rootCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		config.SetDebug(debug)
 		if format != "json" && format != "markdown" {
-			return fmt.Errorf("invalid format %q: must be \"json\" or \"markdown\"", format)
+			return output.Errorf("invalid format %q: must be \"json\" or \"markdown\"", format)
 		}
 		return nil
 	},
@@ -44,7 +45,11 @@ func init() {
 // Execute runs the root command.
 func Execute() error {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		// SilentError means the JSON error was already written to stdout.
+		// Do not print it again to stderr.
+		if !output.IsSilentError(err) {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		return err
 	}
 	return nil

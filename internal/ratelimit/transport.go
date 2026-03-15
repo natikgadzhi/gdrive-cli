@@ -21,7 +21,15 @@ type rateLimitedTransport struct {
 // NewRateLimitedTransport returns an http.RoundTripper that limits
 // outgoing requests to rps requests per second using a token bucket.
 // The burst size equals the ceiling of rps (minimum 1).
+// If rps is zero or negative, rate limiting is effectively disabled
+// by using rate.Inf (unlimited).
 func NewRateLimitedTransport(base http.RoundTripper, rps float64) http.RoundTripper {
+	if rps <= 0 {
+		return &rateLimitedTransport{
+			base:    base,
+			limiter: rate.NewLimiter(rate.Inf, 1),
+		}
+	}
 	burst := int(rps)
 	if burst < 1 {
 		burst = 1

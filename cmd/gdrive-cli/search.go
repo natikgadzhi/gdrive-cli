@@ -25,6 +25,9 @@ var searchCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		query := args[0]
+		if query == "" {
+			return output.Errorf("search query must not be empty")
+		}
 
 		config.DebugLog("Searching for %q with count=%d", query, searchCount)
 
