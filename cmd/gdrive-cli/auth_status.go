@@ -14,15 +14,9 @@ var authStatusCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_, _, err := auth.GetCredentials(config.ConfigDir())
 		if err != nil {
-			return output.PrintJSON(map[string]string{
-				"status":  "error",
-				"message": "Not authenticated. Run `gdrive-cli auth login` first.",
-			})
+			return output.Errorf("Not authenticated. Run `gdrive-cli auth login` first.")
 		}
-		return output.PrintJSON(map[string]string{
-			"status":  "ok",
-			"message": "Authenticated and credentials are valid.",
-		})
+		return output.OK("Authenticated and credentials are valid.")
 	},
 }
 

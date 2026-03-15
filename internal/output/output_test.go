@@ -7,8 +7,11 @@ import (
 	"testing"
 )
 
-func TestPrintJSON(t *testing.T) {
-	// Capture stdout.
+// captureStdout calls fn while redirecting os.Stdout to a pipe,
+// then returns everything written to stdout as a byte slice.
+func captureStdout(t *testing.T, fn func()) []byte {
+	t.Helper()
+
 	old := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -16,13 +19,7 @@ func TestPrintJSON(t *testing.T) {
 	}
 	os.Stdout = w
 
-	data := map[string]string{
-		"status":  "ok",
-		"message": "test message",
-	}
-	if err := PrintJSON(data); err != nil {
-		t.Fatalf("PrintJSON returned error: %v", err)
-	}
+	fn()
 
 	w.Close()
 	os.Stdout = old
@@ -31,11 +28,25 @@ func TestPrintJSON(t *testing.T) {
 	buf.ReadFrom(r)
 	r.Close()
 
-	var result map[string]string
-	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, buf.String())
+	return buf.Bytes()
+}
+
+func TestPrintJSON(t *testing.T) {
+	data := map[string]string{
+		"status":  "ok",
+		"message": "test message",
 	}
 
+	out := captureStdout(t, func() {
+		if err := PrintJSON(data); err != nil {
+			t.Fatalf("PrintJSON returned error: %v", err)
+		}
+	})
+
+	var result map[string]string
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, out)
+	}
 	if result["status"] != "ok" {
 		t.Errorf("expected status=ok, got %q", result["status"])
 	}
@@ -45,60 +56,66 @@ func TestPrintJSON(t *testing.T) {
 }
 
 func TestPrintJSONIndented(t *testing.T) {
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = w
+	out := captureStdout(t, func() {
+		if err := PrintJSON(map[string]string{"key": "value"}); err != nil {
+			t.Fatalf("PrintJSON returned error: %v", err)
+		}
+	})
 
-	data := map[string]string{"key": "value"}
-	if err := PrintJSON(data); err != nil {
-		t.Fatalf("PrintJSON returned error: %v", err)
-	}
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	r.Close()
-
-	output := buf.String()
-	// Indented JSON should contain newlines and spaces.
-	if len(output) < 10 {
-		t.Fatalf("output too short for indented JSON: %q", output)
-	}
-	// Should contain 2-space indentation.
-	expected := "  \"key\": \"value\""
-	if !bytes.Contains(buf.Bytes(), []byte(expected)) {
-		t.Errorf("expected indented output containing %q, got:\n%s", expected, output)
+	// Indented JSON should contain 2-space indentation.
+	expected := []byte(`  "key": "value"`)
+	if !bytes.Contains(out, expected) {
+		t.Errorf("expected indented output containing %q, got:\n%s", expected, out)
 	}
 }
 
 func TestPrintJSONNoHTMLEscape(t *testing.T) {
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = w
+	out := captureStdout(t, func() {
+		if err := PrintJSON(map[string]string{"url": "https://example.com?a=1&b=2"}); err != nil {
+			t.Fatalf("PrintJSON returned error: %v", err)
+		}
+	})
 
-	data := map[string]string{"url": "https://example.com?a=1&b=2"}
-	if err := PrintJSON(data); err != nil {
-		t.Fatalf("PrintJSON returned error: %v", err)
-	}
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	r.Close()
-
-	output := buf.String()
 	// Without HTML escaping, & should remain as & not \u0026.
-	if bytes.Contains(buf.Bytes(), []byte(`\u0026`)) {
-		t.Errorf("expected no HTML escaping, but found \\u0026 in output:\n%s", output)
+	if bytes.Contains(out, []byte(`\u0026`)) {
+		t.Errorf("expected no HTML escaping, but found \\u0026 in output:\n%s", out)
+	}
+}
+
+func TestOK(t *testing.T) {
+	out := captureStdout(t, func() {
+		if err := OK("it worked"); err != nil {
+			t.Fatalf("OK returned error: %v", err)
+		}
+	})
+
+	var result StatusMessage
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, out)
+	}
+	if result.Status != "ok" {
+		t.Errorf("expected status=ok, got %q", result.Status)
+	}
+	if result.Message != "it worked" {
+		t.Errorf("expected message='it worked', got %q", result.Message)
+	}
+}
+
+func TestErrorf(t *testing.T) {
+	out := captureStdout(t, func() {
+		if err := Errorf("failed: %s", "bad input"); err != nil {
+			t.Fatalf("Errorf returned error: %v", err)
+		}
+	})
+
+	var result StatusMessage
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, out)
+	}
+	if result.Status != "error" {
+		t.Errorf("expected status=error, got %q", result.Status)
+	}
+	if result.Message != "failed: bad input" {
+		t.Errorf("expected message='failed: bad input', got %q", result.Message)
 	}
 }

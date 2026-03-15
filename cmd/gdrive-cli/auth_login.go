@@ -13,15 +13,9 @@ var authLoginCmd = &cobra.Command{
 	Long:  "Runs the OAuth2 installed-app flow. Opens a browser for Google consent and saves credentials locally.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := auth.Login(config.ConfigDir()); err != nil {
-			return output.PrintJSON(map[string]string{
-				"status":  "error",
-				"message": err.Error(),
-			})
+			return output.Errorf("%s", err)
 		}
-		return output.PrintJSON(map[string]string{
-			"status":  "ok",
-			"message": "Successfully authenticated with Google Drive.",
-		})
+		return output.OK("Successfully authenticated with Google Drive.")
 	},
 }
 
