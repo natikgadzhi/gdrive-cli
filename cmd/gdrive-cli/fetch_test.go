@@ -26,8 +26,8 @@ func TestFetchCommandFlags(t *testing.T) {
 		shorthand string
 		defValue  string
 	}{
-		"output": {shorthand: "o", defValue: ""},
-		"export": {shorthand: "", defValue: ""},
+		"export": {shorthand: "o", defValue: ""},
+		"dest":   {shorthand: "f", defValue: ""},
 	}
 
 	for name, want := range flags {
@@ -49,6 +49,13 @@ func TestFetchCommandDirFlagRemoved(t *testing.T) {
 	f := fetchCmd.Flags().Lookup("dir")
 	if f != nil {
 		t.Error("expected --dir flag to be removed from fetchCmd, but it is still registered")
+	}
+}
+
+func TestFetchCommandOutputFlagRemoved(t *testing.T) {
+	f := fetchCmd.Flags().Lookup("output")
+	if f != nil {
+		t.Error("expected --output flag to be removed from fetchCmd (replaced by --dest), but it is still registered")
 	}
 }
 

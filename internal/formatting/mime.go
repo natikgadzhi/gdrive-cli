@@ -100,16 +100,6 @@ func GetExportMIME(mime string) (string, bool) {
 	return info.ExportMIME, true
 }
 
-// GetExportExtension returns the file extension for a Google Workspace MIME type.
-// The second return value reports whether the key was found.
-func GetExportExtension(mime string) (string, bool) {
-	info, ok := mimeRegistry[mime]
-	if !ok {
-		return "", false
-	}
-	return info.Extension, true
-}
-
 // GetTypeLabel returns the human-readable label for a Google Workspace MIME type.
 // The second return value reports whether the key was found.
 func GetTypeLabel(mime string) (string, bool) {
@@ -157,6 +147,9 @@ func ResolveExportFormat(mime, exportFormat string) (ExportFormatInfo, error) {
 	if !ok {
 		return ExportFormatInfo{}, fmt.Errorf("unsupported MIME type: %s", mime)
 	}
+
+	// Strip a leading dot so that ".md" is treated the same as "md".
+	exportFormat = strings.TrimPrefix(exportFormat, ".")
 
 	// Use the default if no format was specified.
 	if exportFormat == "" {

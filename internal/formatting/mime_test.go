@@ -51,35 +51,6 @@ func TestGetExportMIME_Unknown(t *testing.T) {
 	}
 }
 
-func TestGetExportExtension(t *testing.T) {
-	tests := []struct {
-		mime string
-		want string
-	}{
-		{MIMEGoogleDoc, ".docx"},
-		{MIMEGoogleSheet, ".csv"},
-		{MIMEGoogleSlides, ".pptx"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.mime, func(t *testing.T) {
-			got, ok := GetExportExtension(tt.mime)
-			if !ok {
-				t.Fatalf("GetExportExtension(%q) not found", tt.mime)
-			}
-			if got != tt.want {
-				t.Errorf("GetExportExtension(%q) = %q, want %q", tt.mime, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGetExportExtension_Unknown(t *testing.T) {
-	_, ok := GetExportExtension("application/pdf")
-	if ok {
-		t.Error("GetExportExtension(application/pdf) should return false for unknown MIME type")
-	}
-}
-
 func TestGetTypeLabel(t *testing.T) {
 	tests := []struct {
 		mime string
@@ -230,6 +201,31 @@ func TestResolveExportFormat_ValidFormats(t *testing.T) {
 			}
 			if info.NeedsMarkdownConversion != tt.wantMdConv {
 				t.Errorf("NeedsMarkdownConversion = %v, want %v", info.NeedsMarkdownConversion, tt.wantMdConv)
+			}
+		})
+	}
+}
+
+func TestResolveExportFormat_DotPrefixedFormats(t *testing.T) {
+	tests := []struct {
+		mime    string
+		format  string
+		wantExt string
+	}{
+		{MIMEGoogleDoc, ".docx", ".docx"},
+		{MIMEGoogleDoc, ".md", ".md"},
+		{MIMEGoogleSheet, ".csv", ".csv"},
+		{MIMEGoogleSlides, ".pptx", ".pptx"},
+		{MIMEGoogleSlides, ".md", ".md"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.mime+"/"+tt.format, func(t *testing.T) {
+			info, err := ResolveExportFormat(tt.mime, tt.format)
+			if err != nil {
+				t.Fatalf("ResolveExportFormat(%q, %q) error: %v", tt.mime, tt.format, err)
+			}
+			if info.Extension != tt.wantExt {
+				t.Errorf("extension = %q, want %q", info.Extension, tt.wantExt)
 			}
 		})
 	}

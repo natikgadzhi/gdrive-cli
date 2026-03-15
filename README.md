@@ -148,7 +148,7 @@ Prints a heading with the query, result count, and a Markdown table of results.
 ### `fetch`
 
 ```sh
-gdrive-cli fetch <url> [--output FILE] [--dir DIR] [--format json|markdown]
+gdrive-cli fetch <url> [--export FORMAT] [--dest PATH] [--format json|markdown]
 ```
 
 Downloads a Google Doc, Sheet, or Slides file and saves it locally.
@@ -156,17 +156,17 @@ Downloads a Google Doc, Sheet, or Slides file and saves it locally.
 | Argument / Option | Default | Description |
 |---|---|---|
 | `url` | required | Full Google Docs/Sheets/Slides URL |
-| `--output` / `-o` | auto-generated | Explicit output file path |
-| `--dir` / `-d` | `.` (current dir) | Output directory (used when `--output` is not set) |
+| `--export` / `-o` | type default | Export format: `docx`, `md`, `csv`, `pptx` (depends on document type) |
+| `--dest` / `-f` | auto-generated | Output file path (or directory; auto-generates filename if directory) |
 | `--format` | `json` | Output format: `json` or `markdown` |
 
-**Export formats:**
+**Default export formats:**
 
-| Source type | Saved as |
-|---|---|
-| Google Doc | `.docx` |
-| Google Sheet | `.csv` |
-| Google Slides | `.pptx` |
+| Source type | Default | Other |
+|---|---|---|
+| Google Doc | `.docx` | `.md` |
+| Google Sheet | `.csv` | |
+| Google Slides | `.pptx` | `.md` |
 
 **Auto-generated filename:** `<sanitized-title><extension>` in the output directory. Characters `/ \ : * ? " < > |` in the title are replaced with `_`.
 
