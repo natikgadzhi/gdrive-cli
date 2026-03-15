@@ -46,7 +46,6 @@ var searchCmd = &cobra.Command{
 		defer spinner.Stop()
 
 		results, err := api.SearchFiles(svc, query, searchCount)
-
 		if err != nil {
 			return output.Errorf("Search failed: %s", err)
 		}
