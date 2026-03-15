@@ -1,24 +1,21 @@
-.PHONY: install uninstall reinstall test lint format typecheck sync
+.PHONY: build test vet lint run clean
 
-install:
-	uv tool install --editable .
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
-uninstall:
-	uv tool uninstall gdrive-cli
-
-reinstall: uninstall install
-
-sync:
-	uv sync
+build:
+	go build -ldflags "-X main.Version=$(VERSION)" -o bin/gdrive-cli ./cmd/gdrive-cli
 
 test:
-	uv run pytest tests/ -v
+	go test ./...
+
+vet:
+	go vet ./...
 
 lint:
-	uv run ruff check src/ tests/
+	golangci-lint run
 
-format:
-	uv run ruff format src/ tests/
+run:
+	go run ./cmd/gdrive-cli
 
-typecheck:
-	uv run pyright src/
+clean:
+	rm -rf bin/

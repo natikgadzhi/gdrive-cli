@@ -1,0 +1,45 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+)
+
+// Version is set via ldflags at build time.
+// Example: go build -ldflags "-X main.Version=1.0.0"
+var Version = "dev"
+
+var (
+	debug  bool
+	format string
+)
+
+var rootCmd = &cobra.Command{
+	Use:   "gdrive-cli",
+	Short: "CLI tool for Google Drive",
+	Long:  "A command-line tool to search and download Google Docs, Sheets, and Slides via the Google Drive API.",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if format != "json" && format != "markdown" {
+			return fmt.Errorf("invalid format %q: must be \"json\" or \"markdown\"", format)
+		}
+		return nil
+	},
+	SilenceUsage:  true,
+	SilenceErrors: true,
+}
+
+func init() {
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Print verbose debug logs to stderr")
+	rootCmd.PersistentFlags().StringVar(&format, "format", "json", "Output format: json or markdown")
+}
+
+// Execute runs the root command.
+func Execute() error {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return err
+	}
+	return nil
+}
