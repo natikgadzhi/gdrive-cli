@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
+	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
 	"github.com/natikgadzhi/gdrive-cli/internal/output"
 	drive "google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
@@ -92,32 +93,43 @@ func TestIntegration_AuthStatus_NotAuthenticated(t *testing.T) {
 	}
 }
 
-func TestIntegration_Version_JSON(t *testing.T) {
+func TestIntegration_Version(t *testing.T) {
 	stdout, _, err := runBinary(t, nil, "version")
 	if err != nil {
 		t.Fatalf("version command failed: %v", err)
 	}
 
-	var result map[string]string
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
-		t.Fatalf("failed to parse JSON output: %v\nraw stdout: %s", err, stdout)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatalf("failed to parse version JSON: %v\nraw: %s", err, stdout)
 	}
 
-	// The binary was built without ldflags, so these should be the defaults.
-	for _, key := range []string{"version", "commit", "date"} {
-		if _, ok := result[key]; !ok {
-			t.Errorf("expected key %q in version output", key)
+	// Verify exactly 3 keys exist.
+	expectedKeys := []string{"version", "commit", "date"}
+	if len(parsed) != len(expectedKeys) {
+		t.Errorf("expected exactly %d keys in version output, got %d", len(expectedKeys), len(parsed))
+	}
+
+	// Verify each key exists, is a string, and has the correct default value.
+	expectedValues := map[string]string{
+		"version": "dev",
+		"commit":  "dev",
+		"date":    "unknown",
+	}
+	for _, key := range expectedKeys {
+		val, ok := parsed[key]
+		if !ok {
+			t.Errorf("missing key %q in version output", key)
+			continue
 		}
-	}
-
-	if result["version"] != "dev" {
-		t.Errorf("expected version %q, got %q", "dev", result["version"])
-	}
-	if result["commit"] != "dev" {
-		t.Errorf("expected commit %q, got %q", "dev", result["commit"])
-	}
-	if result["date"] != "unknown" {
-		t.Errorf("expected date %q, got %q", "unknown", result["date"])
+		str, isString := val.(string)
+		if !isString {
+			t.Errorf("expected key %q to be a string, got %T", key, val)
+			continue
+		}
+		if str != expectedValues[key] {
+			t.Errorf("expected %s %q, got %q", key, expectedValues[key], str)
+		}
 	}
 }
 
@@ -609,34 +621,6 @@ func TestIntegration_Fetch_Sheet(t *testing.T) {
 	}
 }
 
-func TestIntegration_Version_AllFields(t *testing.T) {
-	stdout, _, err := runBinary(t, nil, "version")
-	if err != nil {
-		t.Fatalf("version command failed: %v", err)
-	}
-
-	// Verify the output is valid JSON with exactly the expected keys.
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
-		t.Fatalf("failed to parse version JSON: %v\nraw: %s", err, stdout)
-	}
-
-	expectedKeys := []string{"version", "commit", "date"}
-	if len(parsed) != len(expectedKeys) {
-		t.Errorf("expected exactly %d keys in version output, got %d", len(expectedKeys), len(parsed))
-	}
-	for _, key := range expectedKeys {
-		val, ok := parsed[key]
-		if !ok {
-			t.Errorf("missing key %q in version output", key)
-			continue
-		}
-		if _, isString := val.(string); !isString {
-			t.Errorf("expected key %q to be a string, got %T", key, val)
-		}
-	}
-}
-
 func TestIntegration_Search_CountFlag(t *testing.T) {
 	var capturedPageSize string
 
@@ -697,22 +681,11 @@ func TestIntegration_Fetch_UnsupportedMIME(t *testing.T) {
 	}
 
 	// The fetch command checks if the MIME type is supported before exporting.
-	// Simulate that check.
-	_, ok := supportedExportMIME(meta.MimeType)
+	// Use the real formatting package instead of duplicating the logic.
+	_, ok := formatting.GetExportMIME(meta.MimeType)
 	if ok {
 		t.Errorf("expected application/pdf to be unsupported, but it was accepted")
 	}
-}
-
-// supportedExportMIME mirrors the check in the fetch command.
-func supportedExportMIME(mimeType string) (string, bool) {
-	exportMap := map[string]string{
-		"application/vnd.google-apps.document":     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-		"application/vnd.google-apps.spreadsheet":  "text/csv",
-		"application/vnd.google-apps.presentation": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-	}
-	mime, ok := exportMap[mimeType]
-	return mime, ok
 }
 
 func TestIntegration_Fetch_Slides(t *testing.T) {
