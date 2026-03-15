@@ -215,16 +215,14 @@ func TestExportAsMarkdown_GoogleSheet(t *testing.T) {
 }
 
 func TestExportAsMarkdown_UnsupportedMIME(t *testing.T) {
-	svc, err := drive.NewService(
-		t.Context(),
-		option.WithHTTPClient(http.DefaultClient),
-		option.WithEndpoint("http://localhost:0"),
-	)
-	if err != nil {
-		t.Fatalf("creating drive service: %v", err)
-	}
+	// The server is never called because ExportAsMarkdown returns early
+	// for unsupported MIME types, but we use it to create a valid service.
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
 
-	_, err = ExportAsMarkdown(svc, "file-000", "application/pdf")
+	svc := newTestDriveService(t, server)
+
+	_, err := ExportAsMarkdown(svc, "file-000", "application/pdf")
 	if err == nil {
 		t.Fatal("expected error for unsupported MIME type, got nil")
 	}
