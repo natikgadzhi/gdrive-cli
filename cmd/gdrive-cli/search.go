@@ -25,7 +25,12 @@ var searchCmd = &cobra.Command{
 	Use:   "search <query>",
 	Short: "Search Google Drive for documents",
 	Long:  "Searches Google Drive for Docs, Sheets, and Slides matching the query. Matches on both file name and full text content.",
-	Args:  cobra.ExactArgs(1),
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("requires a search query\n\nUsage: gdrive-cli search <query> [--count N]\n\nExample: gdrive-cli search \"budget 2025\"")
+		}
+		return cobra.ExactArgs(1)(cmd, args)
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		query := args[0]
 		if query == "" {
