@@ -52,14 +52,28 @@ func ConfigDir() string {
 	return filepath.Join(home, ".config", "gdrive-cli")
 }
 
-// CredentialsFile returns the path to the OAuth client credentials JSON file.
-func CredentialsFile() string {
-	return filepath.Join(ConfigDir(), "credentials.json")
+// CredentialsFileIn returns the path to the OAuth client credentials JSON file
+// within the given config directory.
+func CredentialsFileIn(configDir string) string {
+	return filepath.Join(configDir, "credentials.json")
 }
 
-// TokenFile returns the path to the stored OAuth token JSON file.
+// CredentialsFile returns the path to the OAuth client credentials JSON file
+// in the default config directory.
+func CredentialsFile() string {
+	return CredentialsFileIn(ConfigDir())
+}
+
+// TokenFileIn returns the path to the stored OAuth token JSON file
+// within the given config directory.
+func TokenFileIn(configDir string) string {
+	return filepath.Join(configDir, "token.json")
+}
+
+// TokenFile returns the path to the stored OAuth token JSON file
+// in the default config directory.
 func TokenFile() string {
-	return filepath.Join(ConfigDir(), "token.json")
+	return TokenFileIn(ConfigDir())
 }
 
 // CacheDir returns the directory for cached data.
