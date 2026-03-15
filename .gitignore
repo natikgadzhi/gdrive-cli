@@ -8,3 +8,22 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Go
+bin/
+vendor/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Go workspace
+go.work
+go.work.sum
+
+# OS files
+.DS_Store
