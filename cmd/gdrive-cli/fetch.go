@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"path/filepath"
 
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
@@ -94,7 +93,7 @@ The output filename is auto-generated from the document title unless
 			outputPath = fetchOutput
 		} else {
 			safeName := formatting.SanitizeFilename(metadata.Name)
-			outputPath = filepath.Join(fetchDir, fmt.Sprintf("%s%s", safeName, extension))
+			outputPath = filepath.Join(fetchDir, safeName+extension)
 		}
 		config.DebugLog("Output path: %s", outputPath)
 
@@ -105,6 +104,7 @@ The output filename is auto-generated from the document title unless
 			return output.Errorf("Failed to export file: %s", err)
 		}
 
+		// Stop spinner before printing to clear the terminal line.
 		spin.Stop()
 
 		return output.PrintJSON(fetchResult{
