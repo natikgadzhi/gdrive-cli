@@ -140,6 +140,10 @@ func newTestDriveService(t *testing.T, server *httptest.Server) *drive.Service {
 func TestExportAsMarkdown_GoogleDoc(t *testing.T) {
 	// Mock server returns HTML for a Google Doc export.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the correct export MIME type is requested.
+		if got := r.URL.Query().Get("mimeType"); got != "text/html" {
+			t.Errorf("expected mimeType=text/html, got %q", got)
+		}
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<h1>My Document</h1><p>Some text with <strong>bold</strong>.</p>`))
 	}))
@@ -164,6 +168,10 @@ func TestExportAsMarkdown_GoogleSlides(t *testing.T) {
 	plainText := "Slide 1: Introduction\n\nSlide 2: Details\n"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the correct export MIME type is requested.
+		if got := r.URL.Query().Get("mimeType"); got != "text/plain" {
+			t.Errorf("expected mimeType=text/plain, got %q", got)
+		}
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte(plainText))
 	}))
@@ -185,6 +193,10 @@ func TestExportAsMarkdown_GoogleSheet(t *testing.T) {
 	csvContent := "Name,Value\nAlpha,1\nBeta,2\n"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the correct export MIME type is requested.
+		if got := r.URL.Query().Get("mimeType"); got != "text/csv" {
+			t.Errorf("expected mimeType=text/csv, got %q", got)
+		}
 		w.Header().Set("Content-Type", "text/csv")
 		w.Write([]byte(csvContent))
 	}))
