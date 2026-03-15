@@ -62,6 +62,18 @@ func TokenFile() string {
 	return filepath.Join(ConfigDir(), "token.json")
 }
 
+// CredentialsFileIn returns the path to the OAuth client credentials JSON file
+// within the given config directory.
+func CredentialsFileIn(configDir string) string {
+	return filepath.Join(configDir, "credentials.json")
+}
+
+// TokenFileIn returns the path to the stored OAuth token JSON file
+// within the given config directory.
+func TokenFileIn(configDir string) string {
+	return filepath.Join(configDir, "token.json")
+}
+
 // CacheDir returns the directory for cached data.
 // It checks the GDRIVE_CACHE_DIR environment variable first,
 // falling back to ~/.local/share/gdrive-cli/cache.
