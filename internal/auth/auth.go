@@ -5,7 +5,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"golang.org/x/oauth2"
 
@@ -62,10 +61,6 @@ func GetCredentials(configDir string) (*oauth2.Token, *oauth2.Config, error) {
 // IsAuthenticated returns true if a token file exists and can be loaded.
 // It does not attempt to refresh the token or validate it against Google.
 func IsAuthenticated(configDir string) bool {
-	tokenPath := config.TokenFileIn(configDir)
-	if _, err := os.Stat(tokenPath); err != nil {
-		return false
-	}
-	_, err := LoadToken(tokenPath)
+	_, err := LoadToken(config.TokenFileIn(configDir))
 	return err == nil
 }

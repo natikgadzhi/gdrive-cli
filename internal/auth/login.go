@@ -159,8 +159,7 @@ func Login(configDir string) error {
 
 	// Exchange the authorization code for a token.
 	config.DebugLog("Exchanging code for token...")
-	ctx := context.Background()
-	token, err := oauthConfig.Exchange(ctx, code)
+	token, err := oauthConfig.Exchange(context.Background(), code)
 	if err != nil {
 		return fmt.Errorf("token exchange failed: %w", err)
 	}

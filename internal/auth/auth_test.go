@@ -13,6 +13,37 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// writeTestCredentials writes a valid Desktop-app credentials.json to the given
+// directory and returns the file path. authURI and tokenURI default to Google's
+// standard endpoints when empty.
+func writeTestCredentials(t *testing.T, dir, authURI, tokenURI string) string {
+	t.Helper()
+	if authURI == "" {
+		authURI = "https://accounts.google.com/o/oauth2/auth"
+	}
+	if tokenURI == "" {
+		tokenURI = "https://oauth2.googleapis.com/token"
+	}
+	creds := map[string]any{
+		"installed": map[string]any{
+			"client_id":     "test-client-id.apps.googleusercontent.com",
+			"client_secret": "test-secret",
+			"auth_uri":      authURI,
+			"token_uri":     tokenURI,
+			"redirect_uris": []string{"http://localhost"},
+		},
+	}
+	data, err := json.Marshal(creds)
+	if err != nil {
+		t.Fatalf("marshaling test credentials: %v", err)
+	}
+	path := filepath.Join(dir, "credentials.json")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("writing test credentials: %v", err)
+	}
+	return path
+}
+
 // --- Token save/load round-trip tests ---
 
 func TestSaveAndLoadToken(t *testing.T) {
@@ -110,20 +141,7 @@ func TestLoadTokenInvalidJSON(t *testing.T) {
 
 func TestLoadOAuthConfigValidDesktop(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "credentials.json")
-
-	creds := map[string]any{
-		"installed": map[string]any{
-			"client_id":     "test-client-id.apps.googleusercontent.com",
-			"client_secret": "test-secret",
-			"auth_uri":      "https://accounts.google.com/o/oauth2/auth",
-			"token_uri":     "https://oauth2.googleapis.com/token",
-			"redirect_uris": []string{"http://localhost"},
-		},
-	}
-
-	data, _ := json.Marshal(creds)
-	os.WriteFile(path, data, 0600)
+	path := writeTestCredentials(t, dir, "", "")
 
 	cfg, err := LoadOAuthConfig(path)
 	if err != nil {
@@ -278,20 +296,8 @@ func TestLoginFlowWithMockServer(t *testing.T) {
 	}))
 	defer authServer.Close()
 
-	// Write credentials.json with the mock server URLs.
 	dir := t.TempDir()
-	credsPath := filepath.Join(dir, "credentials.json")
-	creds := map[string]any{
-		"installed": map[string]any{
-			"client_id":     "test-client-id.apps.googleusercontent.com",
-			"client_secret": "test-secret",
-			"auth_uri":      authServer.URL,
-			"token_uri":     tokenServer.URL,
-			"redirect_uris": []string{"http://localhost"},
-		},
-	}
-	data, _ := json.Marshal(creds)
-	os.WriteFile(credsPath, data, 0600)
+	credsPath := writeTestCredentials(t, dir, authServer.URL, tokenServer.URL)
 
 	// We can't easily test the full Login flow (it opens a browser and
 	// starts a server on a specific port), so instead we test the
@@ -337,20 +343,7 @@ func TestLoginFlowWithMockServer(t *testing.T) {
 
 func TestGetCredentialsNotAuthenticated(t *testing.T) {
 	dir := t.TempDir()
-
-	// Write valid credentials.json but no token.
-	credsPath := filepath.Join(dir, "credentials.json")
-	creds := map[string]any{
-		"installed": map[string]any{
-			"client_id":     "test-client-id.apps.googleusercontent.com",
-			"client_secret": "test-secret",
-			"auth_uri":      "https://accounts.google.com/o/oauth2/auth",
-			"token_uri":     "https://oauth2.googleapis.com/token",
-			"redirect_uris": []string{"http://localhost"},
-		},
-	}
-	data, _ := json.Marshal(creds)
-	os.WriteFile(credsPath, data, 0600)
+	writeTestCredentials(t, dir, "", "")
 
 	_, _, err := GetCredentials(dir)
 	if err == nil {
@@ -363,20 +356,7 @@ func TestGetCredentialsNotAuthenticated(t *testing.T) {
 
 func TestGetCredentialsWithValidToken(t *testing.T) {
 	dir := t.TempDir()
-
-	// Write valid credentials.json.
-	credsPath := filepath.Join(dir, "credentials.json")
-	creds := map[string]any{
-		"installed": map[string]any{
-			"client_id":     "test-client-id.apps.googleusercontent.com",
-			"client_secret": "test-secret",
-			"auth_uri":      "https://accounts.google.com/o/oauth2/auth",
-			"token_uri":     "https://oauth2.googleapis.com/token",
-			"redirect_uris": []string{"http://localhost"},
-		},
-	}
-	data, _ := json.Marshal(creds)
-	os.WriteFile(credsPath, data, 0600)
+	writeTestCredentials(t, dir, "", "")
 
 	// Write a valid, non-expired token.
 	tokenPath := filepath.Join(dir, "token.json")
