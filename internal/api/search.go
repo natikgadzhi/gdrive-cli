@@ -24,7 +24,7 @@ func SearchFiles(svc *drive.Service, query string, maxResults int) ([]FileResult
 	}
 	typeFilter := strings.Join(typeClauses, " or ")
 
-	fullQuery := fmt.Sprintf("(%s) and (name contains '%s' or fullText contains '%s')",
+	fullQuery := fmt.Sprintf("(%s) and (name contains '%s' or fullText contains '%s') and trashed = false",
 		typeFilter, escaped, escaped)
 
 	config.DebugLog("Drive API query: %s", fullQuery)
