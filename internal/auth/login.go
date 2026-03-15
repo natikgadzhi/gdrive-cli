@@ -5,11 +5,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -67,10 +69,17 @@ func Login(configDir string) error {
 	errChan := make(chan error, 1)
 
 	mux := http.NewServeMux()
-	requestCount := 0
+	var requestCount atomic.Int32
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		config.DebugLog("HTTP request #%d: %s %s from %s", requestCount, r.Method, r.URL.String(), r.RemoteAddr)
+		count := requestCount.Add(1)
+		config.DebugLog("HTTP request #%d: %s %s from %s", count, r.Method, r.URL.String(), r.RemoteAddr)
+
+		// Enforce max request limit.
+		if int(count) > maxRequests {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			errChan <- fmt.Errorf("handled %d requests without receiving OAuth callback, giving up", maxRequests)
+			return
+		}
 
 		// Check for the authorization code in the query parameters.
 		code := r.URL.Query().Get("code")
@@ -79,14 +88,14 @@ func Login(configDir string) error {
 
 		if errParam != "" {
 			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprintf(w, "<html><body><h2>Authentication failed</h2><p>Error: %s</p><p>You can close this tab.</p></body></html>", errParam)
+			fmt.Fprintf(w, "<html><body><h2>Authentication failed</h2><p>Error: %s</p><p>You can close this tab.</p></body></html>", html.EscapeString(errParam))
 			errChan <- fmt.Errorf("OAuth error: %s", errParam)
 			return
 		}
 
 		if code == "" {
 			// This is likely a favicon or preflight request; ignore it.
-			config.DebugLog("No auth code in request #%d, ignoring", requestCount)
+			config.DebugLog("No auth code in request #%d, ignoring", count)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -102,7 +111,7 @@ func Login(configDir string) error {
 		// Success! Return the code.
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, "<html><body><h2>Authentication successful!</h2><p>You can close this tab.</p></body></html>")
-		config.DebugLog("Received auth code after %d request(s)", requestCount)
+		config.DebugLog("Received auth code after %d request(s)", count)
 		codeChan <- code
 	})
 
@@ -140,9 +149,9 @@ func Login(configDir string) error {
 	case err := <-errChan:
 		_ = server.Shutdown(context.Background())
 		return err
-	case <-time.After(serverTimeout * time.Duration(maxRequests)):
+	case <-time.After(5 * time.Minute):
 		_ = server.Shutdown(context.Background())
-		return fmt.Errorf("timed out waiting for OAuth callback")
+		return fmt.Errorf("timed out waiting for OAuth callback after 5 minutes")
 	}
 
 	// Shut down the server.
