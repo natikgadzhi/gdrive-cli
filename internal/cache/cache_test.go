@@ -236,6 +236,36 @@ func TestStore_OverwriteExisting(t *testing.T) {
 	}
 }
 
+func TestStoreAndLoad_EmptyBody(t *testing.T) {
+	tmpDir := t.TempDir()
+	entry := newTestEntry()
+	entry.Body = ""
+
+	path, err := Store(tmpDir, entry)
+	if err != nil {
+		t.Fatalf("Store() error: %v", err)
+	}
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Fatalf("expected file at %s, but it does not exist", path)
+	}
+
+	loaded, err := Load(tmpDir, entry.Slug)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if loaded.Body != "" {
+		t.Errorf("Body = %q, want empty string", loaded.Body)
+	}
+	if loaded.Name != entry.Name {
+		t.Errorf("Name = %q, want %q", loaded.Name, entry.Name)
+	}
+	if loaded.FileID != entry.FileID {
+		t.Errorf("FileID = %q, want %q", loaded.FileID, entry.FileID)
+	}
+}
+
 // --- Exists tests ---
 
 func TestExists_Found(t *testing.T) {
@@ -386,12 +416,9 @@ func TestFrontmatterRoundTrip(t *testing.T) {
 	}
 }
 
-// --- Format parsing tests ---
+// --- Slug edge-case tests ---
 
-func TestParseFormat(t *testing.T) {
-	// This tests the output.ParseFormat function indirectly via import,
-	// but since it's in a different package, the format_test.go in output/
-	// handles it. This test validates slug edge cases instead.
+func TestGenerateSlug_EdgeCases(t *testing.T) {
 
 	tests := []struct {
 		name   string

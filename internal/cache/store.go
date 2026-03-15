@@ -9,47 +9,43 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// subdirectory maps a human-readable type label to the cache subdirectory.
-func subdirectory(typeLabel string) string {
-	switch typeLabel {
-	case "Google Sheet":
-		return "spreadsheets"
-	case "Google Slides":
-		return "presentations"
-	default:
-		// Google Doc and anything else goes into documents.
-		return "documents"
-	}
+// typeLayout holds the cache subdirectory and file extension for a doc type.
+type typeLayout struct {
+	Subdir string
+	Ext    string
 }
 
-// extension returns the cache file extension based on the type label.
-func extension(typeLabel string) string {
-	switch typeLabel {
-	case "Google Sheet":
-		return ".csv"
-	default:
-		return ".md"
+// defaultLayout is used for unknown type labels (falls back to documents/.md).
+var defaultLayout = typeLayout{Subdir: "documents", Ext: ".md"}
+
+// typeLayouts maps human-readable type labels to their cache layout.
+// This is the single source of truth for subdir/extension mapping.
+var typeLayouts = map[string]typeLayout{
+	"Google Doc":    {Subdir: "documents", Ext: ".md"},
+	"Google Sheet":  {Subdir: "spreadsheets", Ext: ".csv"},
+	"Google Slides": {Subdir: "presentations", Ext: ".md"},
+}
+
+// layoutFor returns the cache layout for a given type label.
+// Unknown types fall back to defaultLayout (documents/.md).
+func layoutFor(typeLabel string) typeLayout {
+	if l, ok := typeLayouts[typeLabel]; ok {
+		return l
 	}
+	return defaultLayout
 }
 
 // entryPath returns the full path for a cache entry file.
 func entryPath(cacheDir string, entry CacheEntry) string {
-	return filepath.Join(cacheDir, subdirectory(entry.Type), entry.Slug+extension(entry.Type))
+	l := layoutFor(entry.Type)
+	return filepath.Join(cacheDir, l.Subdir, entry.Slug+l.Ext)
 }
 
 // entryPathForSlug searches all subdirectories for a file matching the slug.
 // It tries all known subdirectories and extensions.
 func entryPathForSlug(cacheDir string, slug string) (string, bool) {
-	candidates := []struct {
-		sub string
-		ext string
-	}{
-		{"documents", ".md"},
-		{"spreadsheets", ".csv"},
-		{"presentations", ".md"},
-	}
-	for _, c := range candidates {
-		p := filepath.Join(cacheDir, c.sub, slug+c.ext)
+	for _, l := range typeLayouts {
+		p := filepath.Join(cacheDir, l.Subdir, slug+l.Ext)
 		if _, err := os.Stat(p); err == nil {
 			return p, true
 		}
@@ -153,17 +149,8 @@ func Exists(cacheDir string, slug string) bool {
 func List(cacheDir string) ([]CacheEntry, error) {
 	var entries []CacheEntry
 
-	subdirs := []struct {
-		sub string
-		ext string
-	}{
-		{"documents", ".md"},
-		{"spreadsheets", ".csv"},
-		{"presentations", ".md"},
-	}
-
-	for _, sd := range subdirs {
-		dir := filepath.Join(cacheDir, sd.sub)
+	for _, l := range typeLayouts {
+		dir := filepath.Join(cacheDir, l.Subdir)
 		dirEntries, err := os.ReadDir(dir)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -172,7 +159,7 @@ func List(cacheDir string) ([]CacheEntry, error) {
 			return nil, fmt.Errorf("reading cache directory %s: %w", dir, err)
 		}
 		for _, de := range dirEntries {
-			if de.IsDir() || !strings.HasSuffix(de.Name(), sd.ext) {
+			if de.IsDir() || !strings.HasSuffix(de.Name(), l.Ext) {
 				continue
 			}
 			p := filepath.Join(dir, de.Name())
