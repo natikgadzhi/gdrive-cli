@@ -816,3 +816,199 @@ func TestIntegration_Fetch_MetadataNotFound(t *testing.T) {
 		t.Errorf("expected 'failed to get file metadata' in error, got: %v", err)
 	}
 }
+
+func TestIntegration_Fetch_DocAsMarkdown(t *testing.T) {
+	// Mock server that returns HTML for doc export, which gets converted to markdown.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		if strings.Contains(path, "files/mddoc789") && !strings.Contains(path, "export") {
+			resp := map[string]any{
+				"id":          "mddoc789",
+				"name":        "Export MD Doc",
+				"mimeType":    "application/vnd.google-apps.document",
+				"webViewLink": "https://docs.google.com/document/d/mddoc789/edit",
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if strings.Contains(path, "files/mddoc789/export") {
+			mimeType := r.URL.Query().Get("mimeType")
+			if mimeType == "text/html" {
+				w.Header().Set("Content-Type", "text/html")
+				w.Write([]byte("<h1>Hello World</h1><p>This is <strong>bold</strong>.</p>"))
+				return
+			}
+			w.Header().Set("Content-Type", mimeType)
+			w.Write([]byte("exported"))
+			return
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	svc := newMockDriveService(t, server)
+	tmpDir := t.TempDir()
+
+	// Verify metadata retrieval.
+	meta, err := api.GetFileMetadata(svc, "mddoc789")
+	if err != nil {
+		t.Fatalf("GetFileMetadata failed: %v", err)
+	}
+	if meta.MimeType != formatting.MIMEGoogleDoc {
+		t.Fatalf("expected Google Doc MIME, got %q", meta.MimeType)
+	}
+
+	// Resolve export format to md.
+	resolved, err := formatting.ResolveExportFormat(meta.MimeType, "md")
+	if err != nil {
+		t.Fatalf("ResolveExportFormat failed: %v", err)
+	}
+	if resolved.Extension != ".md" {
+		t.Errorf("expected .md extension, got %q", resolved.Extension)
+	}
+	if !resolved.NeedsMarkdownConversion {
+		t.Error("expected NeedsMarkdownConversion=true")
+	}
+
+	// Export as markdown (same path as fetch --output md).
+	mdContent, err := output.ExportAsMarkdown(svc, "mddoc789", meta.MimeType)
+	if err != nil {
+		t.Fatalf("ExportAsMarkdown failed: %v", err)
+	}
+
+	// Verify the content was converted from HTML to markdown.
+	if !strings.Contains(mdContent, "Hello World") {
+		t.Errorf("expected markdown to contain 'Hello World', got: %s", mdContent)
+	}
+	if !strings.Contains(mdContent, "bold") {
+		t.Errorf("expected markdown to contain 'bold', got: %s", mdContent)
+	}
+
+	// Write to file (as fetch command would).
+	outputPath := filepath.Join(tmpDir, "Export_MD_Doc.md")
+	if err := os.WriteFile(outputPath, []byte(mdContent), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if !strings.Contains(string(data), "Hello World") {
+		t.Errorf("written file missing expected content")
+	}
+
+	// Verify the JSON result shape.
+	result := fetchResult{
+		Status:  "ok",
+		FileID:  "mddoc789",
+		Name:    meta.Name,
+		Type:    "Google Doc",
+		SavedTo: outputPath,
+	}
+	resultJSON, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(resultJSON, &parsed); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+	if !strings.HasSuffix(parsed["saved_to"].(string), ".md") {
+		t.Errorf("expected saved_to to end with .md, got %v", parsed["saved_to"])
+	}
+}
+
+func TestIntegration_Fetch_SlidesAsMarkdown(t *testing.T) {
+	plainTextContent := "Slide 1: Introduction\nSlide 2: Details\nSlide 3: Conclusion"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		if strings.Contains(path, "files/pres202") && !strings.Contains(path, "export") {
+			resp := map[string]any{
+				"id":          "pres202",
+				"name":        "Team Slides",
+				"mimeType":    "application/vnd.google-apps.presentation",
+				"webViewLink": "https://docs.google.com/presentation/d/pres202/edit",
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if strings.Contains(path, "files/pres202/export") {
+			mimeType := r.URL.Query().Get("mimeType")
+			if mimeType == "text/plain" {
+				w.Header().Set("Content-Type", "text/plain")
+				w.Write([]byte(plainTextContent))
+				return
+			}
+			w.Header().Set("Content-Type", mimeType)
+			w.Write([]byte("pptx-content"))
+			return
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	svc := newMockDriveService(t, server)
+	tmpDir := t.TempDir()
+
+	meta, err := api.GetFileMetadata(svc, "pres202")
+	if err != nil {
+		t.Fatalf("GetFileMetadata failed: %v", err)
+	}
+
+	// Resolve to md format.
+	resolved, err := formatting.ResolveExportFormat(meta.MimeType, "md")
+	if err != nil {
+		t.Fatalf("ResolveExportFormat failed: %v", err)
+	}
+	if resolved.Extension != ".md" {
+		t.Errorf("expected .md, got %q", resolved.Extension)
+	}
+
+	// Export as markdown (plain text for slides).
+	mdContent, err := output.ExportAsMarkdown(svc, "pres202", meta.MimeType)
+	if err != nil {
+		t.Fatalf("ExportAsMarkdown failed: %v", err)
+	}
+	if mdContent != plainTextContent {
+		t.Errorf("expected plain text content, got %q", mdContent)
+	}
+
+	// Write to .md file.
+	outputPath := filepath.Join(tmpDir, "Team_Slides.md")
+	if err := os.WriteFile(outputPath, []byte(mdContent), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(data) != plainTextContent {
+		t.Errorf("unexpected file content: %q", string(data))
+	}
+}
+
+func TestIntegration_Fetch_SheetRejectsDocx(t *testing.T) {
+	// Verifying that ResolveExportFormat rejects invalid formats
+	// (this is what the fetch command does before making any API calls).
+	_, err := formatting.ResolveExportFormat(formatting.MIMEGoogleSheet, "docx")
+	if err == nil {
+		t.Fatal("expected error when requesting docx export for a Google Sheet")
+	}
+	if !strings.Contains(err.Error(), "Google Sheet") {
+		t.Errorf("error should mention 'Google Sheet', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "csv") {
+		t.Errorf("error should mention valid format 'csv', got: %v", err)
+	}
+}
