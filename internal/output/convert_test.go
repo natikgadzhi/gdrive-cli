@@ -1,0 +1,240 @@
+package output
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
+	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/option"
+)
+
+func TestHTMLToMarkdown_HeadingsAndParagraphs(t *testing.T) {
+	html := []byte(`<h1>Title</h1><p>Hello world.</p><h2>Subtitle</h2><p>More text.</p>`)
+
+	md, err := HTMLToMarkdown(html)
+	if err != nil {
+		t.Fatalf("HTMLToMarkdown returned error: %v", err)
+	}
+
+	for _, want := range []string{"# Title", "Hello world.", "## Subtitle", "More text."} {
+		if !strings.Contains(md, want) {
+			t.Errorf("expected markdown to contain %q, got:\n%s", want, md)
+		}
+	}
+}
+
+func TestHTMLToMarkdown_BoldAndItalic(t *testing.T) {
+	html := []byte(`<p><strong>bold</strong> and <em>italic</em></p>`)
+
+	md, err := HTMLToMarkdown(html)
+	if err != nil {
+		t.Fatalf("HTMLToMarkdown returned error: %v", err)
+	}
+
+	if !strings.Contains(md, "**bold**") {
+		t.Errorf("expected bold markdown, got:\n%s", md)
+	}
+	if !strings.Contains(md, "*italic*") {
+		t.Errorf("expected italic markdown, got:\n%s", md)
+	}
+}
+
+func TestHTMLToMarkdown_Links(t *testing.T) {
+	html := []byte(`<p>Visit <a href="https://example.com">Example</a>.</p>`)
+
+	md, err := HTMLToMarkdown(html)
+	if err != nil {
+		t.Fatalf("HTMLToMarkdown returned error: %v", err)
+	}
+
+	if !strings.Contains(md, "[Example](https://example.com)") {
+		t.Errorf("expected markdown link, got:\n%s", md)
+	}
+}
+
+func TestHTMLToMarkdown_Lists(t *testing.T) {
+	html := []byte(`<ul><li>One</li><li>Two</li><li>Three</li></ul>`)
+
+	md, err := HTMLToMarkdown(html)
+	if err != nil {
+		t.Fatalf("HTMLToMarkdown returned error: %v", err)
+	}
+
+	for _, item := range []string{"One", "Two", "Three"} {
+		// List items should appear prefixed with - or *
+		if !strings.Contains(md, item) {
+			t.Errorf("expected list item %q in markdown, got:\n%s", item, md)
+		}
+	}
+
+	// Verify at least one list marker exists
+	if !strings.Contains(md, "- ") && !strings.Contains(md, "* ") {
+		t.Errorf("expected list markers (- or *) in markdown, got:\n%s", md)
+	}
+}
+
+func TestHTMLToMarkdown_CodeBlock(t *testing.T) {
+	html := []byte(`<pre><code>func main() {}</code></pre>`)
+
+	md, err := HTMLToMarkdown(html)
+	if err != nil {
+		t.Fatalf("HTMLToMarkdown returned error: %v", err)
+	}
+
+	if !strings.Contains(md, "func main() {}") {
+		t.Errorf("expected code content in markdown, got:\n%s", md)
+	}
+	if !strings.Contains(md, "```") {
+		t.Errorf("expected code fence in markdown, got:\n%s", md)
+	}
+}
+
+func TestHTMLToMarkdown_StripsScriptsAndStyles(t *testing.T) {
+	html := []byte(`<html><head><style>body{color:red}</style></head><body><script>alert('x')</script><p>Content</p></body></html>`)
+
+	md, err := HTMLToMarkdown(html)
+	if err != nil {
+		t.Fatalf("HTMLToMarkdown returned error: %v", err)
+	}
+
+	if strings.Contains(md, "alert") {
+		t.Errorf("expected scripts to be stripped, got:\n%s", md)
+	}
+	if strings.Contains(md, "color:red") {
+		t.Errorf("expected styles to be stripped, got:\n%s", md)
+	}
+	if !strings.Contains(md, "Content") {
+		t.Errorf("expected content to be preserved, got:\n%s", md)
+	}
+}
+
+func TestHTMLToMarkdown_EmptyInput(t *testing.T) {
+	md, err := HTMLToMarkdown([]byte(""))
+	if err != nil {
+		t.Fatalf("HTMLToMarkdown returned error on empty input: %v", err)
+	}
+	// Empty HTML should produce empty or whitespace-only markdown.
+	if strings.TrimSpace(md) != "" {
+		t.Errorf("expected empty markdown for empty HTML, got: %q", md)
+	}
+}
+
+// newTestDriveService creates a Drive service backed by the given test server.
+func newTestDriveService(t *testing.T, server *httptest.Server) *drive.Service {
+	t.Helper()
+
+	svc, err := drive.NewService(
+		t.Context(),
+		option.WithHTTPClient(server.Client()),
+		option.WithEndpoint(server.URL),
+	)
+	if err != nil {
+		t.Fatalf("creating test drive service: %v", err)
+	}
+	return svc
+}
+
+func TestExportAsMarkdown_GoogleDoc(t *testing.T) {
+	// Mock server returns HTML for a Google Doc export.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<h1>My Document</h1><p>Some text with <strong>bold</strong>.</p>`))
+	}))
+	defer server.Close()
+
+	svc := newTestDriveService(t, server)
+
+	md, err := ExportAsMarkdown(svc, "file-123", formatting.MIMEGoogleDoc)
+	if err != nil {
+		t.Fatalf("ExportAsMarkdown returned error: %v", err)
+	}
+
+	if !strings.Contains(md, "# My Document") {
+		t.Errorf("expected heading in markdown, got:\n%s", md)
+	}
+	if !strings.Contains(md, "**bold**") {
+		t.Errorf("expected bold in markdown, got:\n%s", md)
+	}
+}
+
+func TestExportAsMarkdown_GoogleSlides(t *testing.T) {
+	plainText := "Slide 1: Introduction\n\nSlide 2: Details\n"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(plainText))
+	}))
+	defer server.Close()
+
+	svc := newTestDriveService(t, server)
+
+	result, err := ExportAsMarkdown(svc, "file-456", formatting.MIMEGoogleSlides)
+	if err != nil {
+		t.Fatalf("ExportAsMarkdown returned error: %v", err)
+	}
+
+	if result != plainText {
+		t.Errorf("expected plain text pass-through, got:\n%q\nwant:\n%q", result, plainText)
+	}
+}
+
+func TestExportAsMarkdown_GoogleSheet(t *testing.T) {
+	csvContent := "Name,Value\nAlpha,1\nBeta,2\n"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/csv")
+		w.Write([]byte(csvContent))
+	}))
+	defer server.Close()
+
+	svc := newTestDriveService(t, server)
+
+	result, err := ExportAsMarkdown(svc, "file-789", formatting.MIMEGoogleSheet)
+	if err != nil {
+		t.Fatalf("ExportAsMarkdown returned error: %v", err)
+	}
+
+	if result != csvContent {
+		t.Errorf("expected CSV pass-through, got:\n%q\nwant:\n%q", result, csvContent)
+	}
+}
+
+func TestExportAsMarkdown_UnsupportedMIME(t *testing.T) {
+	svc, err := drive.NewService(
+		t.Context(),
+		option.WithHTTPClient(http.DefaultClient),
+		option.WithEndpoint("http://localhost:0"),
+	)
+	if err != nil {
+		t.Fatalf("creating drive service: %v", err)
+	}
+
+	_, err = ExportAsMarkdown(svc, "file-000", "application/pdf")
+	if err == nil {
+		t.Fatal("expected error for unsupported MIME type, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported MIME type") {
+		t.Errorf("expected 'unsupported MIME type' in error, got: %v", err)
+	}
+}
+
+func TestExportAsMarkdown_DriveAPIError(t *testing.T) {
+	// Mock server returns an error.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	svc := newTestDriveService(t, server)
+
+	_, err := ExportAsMarkdown(svc, "file-err", formatting.MIMEGoogleDoc)
+	if err == nil {
+		t.Fatal("expected error from Drive API failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "drive export failed") {
+		t.Errorf("expected 'drive export failed' in error, got: %v", err)
+	}
+}
