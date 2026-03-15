@@ -25,7 +25,7 @@ The tool uses the `drive.readonly` scope only.
 **Homebrew:**
 
 ```sh
-brew install natikgadzhi/taps/gdrive-cli
+brew install natikgadzhi/homebrew-taps/gdrive-cli
 ```
 
 **From source:**

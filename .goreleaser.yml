@@ -29,7 +29,7 @@ checksum:
 brews:
   - repository:
       owner: natikgadzhi
-      name: taps
+      name: homebrew-taps
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/natikgadzhi/gdrive-cli"
