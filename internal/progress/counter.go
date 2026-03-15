@@ -92,7 +92,7 @@ func (c *Counter) Done() {
 }
 
 // FormatBytes converts a byte count into a human-readable string.
-// Uses decimal SI-like prefixes: B, KB, MB, GB.
+// Uses binary units (1024-based) with common labels: B, KB, MB, GB.
 // Negative values are treated as zero.
 func FormatBytes(n int64) string {
 	if n < 0 {

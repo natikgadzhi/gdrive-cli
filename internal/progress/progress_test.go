@@ -32,22 +32,17 @@ func TestFormatBytes(t *testing.T) {
 
 func TestCounterIncrement(t *testing.T) {
 	c := NewCounter("Searching...")
-	// Force disabled so render() is a no-op (no TTY in tests).
+	// In tests, stderr is not a TTY so render() is already a no-op.
 	c.enabled = false
 
 	c.Increment(3)
-	if c.count != 3 {
-		t.Errorf("count = %d, want 3", c.count)
-	}
-	c.Increment(2)
-	if c.count != 5 {
-		t.Errorf("count = %d, want 5", c.count)
+	if got, want := c.String(), "Searching... 3 results"; got != want {
+		t.Errorf("after Increment(3), String() = %q, want %q", got, want)
 	}
 
-	want := "Searching... 5 results"
-	got := c.String()
-	if got != want {
-		t.Errorf("String() = %q, want %q", got, want)
+	c.Increment(2)
+	if got, want := c.String(), "Searching... 5 results"; got != want {
+		t.Errorf("after Increment(2), String() = %q, want %q", got, want)
 	}
 }
 
