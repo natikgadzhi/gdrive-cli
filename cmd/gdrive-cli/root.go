@@ -18,8 +18,10 @@ var (
 )
 
 var (
-	debug  bool
-	format string
+	debug      bool
+	formatFlag string
+	// outputFormat is the parsed output format, set in PersistentPreRunE.
+	outputFormat output.Format
 )
 
 var rootCmd = &cobra.Command{
@@ -28,9 +30,11 @@ var rootCmd = &cobra.Command{
 	Long:  "A command-line tool to search and download Google Docs, Sheets, and Slides via the Google Drive API.",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		config.SetDebug(debug)
-		if format != "json" && format != "markdown" {
-			return output.Errorf("invalid format %q: must be \"json\" or \"markdown\"", format)
+		f, err := output.ParseFormat(formatFlag)
+		if err != nil {
+			return output.Errorf("invalid format %q: must be \"json\" or \"markdown\"", formatFlag)
 		}
+		outputFormat = f
 		return nil
 	},
 	SilenceUsage:  true,
@@ -39,7 +43,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Print verbose debug logs to stderr")
-	rootCmd.PersistentFlags().StringVar(&format, "format", "json", "Output format: json or markdown")
+	rootCmd.PersistentFlags().StringVar(&formatFlag, "format", "json", "Output format: json or markdown")
 }
 
 // Execute runs the root command.

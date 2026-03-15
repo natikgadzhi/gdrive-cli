@@ -148,8 +148,8 @@ func Exists(cacheDir string, slug string) bool {
 	return found
 }
 
-// List returns all cached entries in the cache directory, reading only
-// the YAML frontmatter (Body is left empty for efficiency).
+// List returns all cached entries in the cache directory. Each file is read
+// and parsed in full, but Body is cleared before returning for efficiency.
 func List(cacheDir string) ([]CacheEntry, error) {
 	var entries []CacheEntry
 

@@ -14,6 +14,7 @@ import (
 	"github.com/natikgadzhi/gdrive-cli/internal/output"
 	"github.com/natikgadzhi/gdrive-cli/internal/progress"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -145,14 +146,14 @@ The output filename is auto-generated from the document title unless
 			}
 
 			// If markdown format requested, print the cached content to stdout.
-			if format == "markdown" {
+			if outputFormat == output.FormatMarkdown {
 				spin.Stop()
+				fm, err := yaml.Marshal(entry)
+				if err != nil {
+					return output.Errorf("Failed to marshal frontmatter: %s", err)
+				}
 				fmt.Fprint(os.Stdout, "---\n")
-				fmt.Fprintf(os.Stdout, "tool: %s\n", entry.Tool)
-				fmt.Fprintf(os.Stdout, "name: %s\n", entry.Name)
-				fmt.Fprintf(os.Stdout, "type: %s\n", entry.Type)
-				fmt.Fprintf(os.Stdout, "file_id: %s\n", entry.FileID)
-				fmt.Fprintf(os.Stdout, "source_url: %s\n", entry.SourceURL)
+				os.Stdout.Write(fm)
 				fmt.Fprint(os.Stdout, "---\n")
 				fmt.Fprint(os.Stdout, mdContent)
 				return nil

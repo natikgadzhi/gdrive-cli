@@ -57,7 +57,7 @@ var searchCmd = &cobra.Command{
 		}
 
 		// Markdown table output.
-		if format == "markdown" {
+		if outputFormat == output.FormatMarkdown {
 			spinner.Stop()
 			fmt.Fprintf(os.Stdout, "# Search: %s\n\n", query)
 			fmt.Fprintf(os.Stdout, "**%d results**\n\n", len(results))
