@@ -8,9 +8,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is set via ldflags at build time.
-// Example: go build -ldflags "-X main.Version=1.0.0"
-var Version = "dev"
+// Version, Commit, and Date are set via ldflags at build time.
+// Example: go build -ldflags "-X main.Version=1.0.0 -X main.Commit=abc123 -X main.Date=2025-01-01"
+var (
+	Version = "dev"
+	Commit  = "dev"
+	Date    = "unknown"
+)
 
 var (
 	debug  bool
