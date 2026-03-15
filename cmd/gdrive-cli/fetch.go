@@ -38,7 +38,7 @@ var fetchCmd = &cobra.Command{
 	Short: "Download a Google Doc, Sheet, or Slides file",
 	Long: `Downloads a Google Doc, Sheet, or Slides file and saves it locally.
 
-Use --export / -o to choose the file format for the download. If omitted,
+Use --output / -o to choose the file format for the download. If omitted,
 the default native format is used.
 
 Export formats per document type:
@@ -46,7 +46,7 @@ Export formats per document type:
   Google Sheet  : csv  (default)
   Google Slides : pptx (default), md
 
-When --export md (or -o md) is used:
+When --output md (or -o md) is used:
   - Google Docs are exported as HTML and converted to Markdown (.md)
   - Google Slides are exported as plain text and saved as .md
 
@@ -279,7 +279,7 @@ func printMarkdownOutput(entry cache.CacheEntry) {
 }
 
 func init() {
-	fetchCmd.Flags().StringVarP(&fetchExportFormat, "export", "o", "", "Export format: docx, md, csv, pptx (depends on document type)")
+	fetchCmd.Flags().StringVarP(&fetchExportFormat, "output", "o", "", "Export format: docx, md, csv, pptx (depends on document type)")
 	fetchCmd.Flags().StringVarP(&fetchDest, "dest", "f", "", "Output path (file or directory; auto-generates filename if directory)")
 	rootCmd.AddCommand(fetchCmd)
 }

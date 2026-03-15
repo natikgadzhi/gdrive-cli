@@ -874,7 +874,7 @@ func TestIntegration_Fetch_DocAsMarkdown(t *testing.T) {
 		t.Error("expected NeedsMarkdownConversion=true")
 	}
 
-	// Export as markdown (same path as fetch --export md).
+	// Export as markdown (same path as fetch --output md).
 	mdContent, err := output.ExportAsMarkdown(svc, "mddoc789", meta.MimeType)
 	if err != nil {
 		t.Fatalf("ExportAsMarkdown failed: %v", err)
