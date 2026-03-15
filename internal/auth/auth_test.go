@@ -2,11 +2,11 @@ package auth
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -174,7 +174,7 @@ func TestLoadOAuthConfigWebClientRejected(t *testing.T) {
 
 	// Check error message mentions Web application.
 	errMsg := err.Error()
-	if !(contains(errMsg, "Web application") || contains(errMsg, "web")) {
+	if !(strings.Contains(errMsg, "Web application") || strings.Contains(errMsg, "web")) {
 		t.Errorf("error message should mention Web application, got: %s", errMsg)
 	}
 }
@@ -186,10 +186,10 @@ func TestLoadOAuthConfigMissingFile(t *testing.T) {
 	}
 
 	errMsg := err.Error()
-	if !contains(errMsg, "not found") {
+	if !strings.Contains(errMsg, "not found") {
 		t.Errorf("error message should mention 'not found', got: %s", errMsg)
 	}
-	if !contains(errMsg, "console.cloud.google.com") {
+	if !strings.Contains(errMsg, "console.cloud.google.com") {
 		t.Errorf("error message should include Google Cloud console link, got: %s", errMsg)
 	}
 }
@@ -356,7 +356,7 @@ func TestGetCredentialsNotAuthenticated(t *testing.T) {
 	if err == nil {
 		t.Fatal("GetCredentials should return error when not authenticated")
 	}
-	if !contains(err.Error(), "not authenticated") {
+	if !strings.Contains(err.Error(), "not authenticated") {
 		t.Errorf("error should mention 'not authenticated', got: %s", err.Error())
 	}
 }
@@ -408,25 +408,8 @@ func TestGetCredentialsMissingCredentialsFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("GetCredentials should return error when credentials.json is missing")
 	}
-	if !contains(err.Error(), "not found") {
+	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("error should mention 'not found', got: %s", err.Error())
 	}
 }
 
-// --- Helper ---
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-// Silence the unused import warning for fmt if we need it later.
-var _ = fmt.Sprintf
