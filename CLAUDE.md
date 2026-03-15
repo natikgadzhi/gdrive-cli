@@ -1,5 +1,14 @@
 @README.md
 
+# Build Commands
+
+```bash
+go build ./...       # Build all packages
+go vet ./...         # Run vet checks
+go test ./...        # Run all tests
+go test -tags integration ./tests/integration/...  # Run integration tests (requires Google credentials)
+```
+
 # Multi-agent Work Environment
 
 ## How It Works
