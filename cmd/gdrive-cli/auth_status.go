@@ -16,7 +16,7 @@ var authStatusCmd = &cobra.Command{
 		if err != nil {
 			return output.PrintJSON(map[string]string{
 				"status":  "error",
-				"message": "Not authenticated. Run 'gdrive-cli auth login' first.",
+				"message": "Not authenticated. Run `gdrive-cli auth login` first.",
 			})
 		}
 		return output.PrintJSON(map[string]string{
