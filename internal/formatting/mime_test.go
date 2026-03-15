@@ -22,7 +22,7 @@ func TestMIMEConstants(t *testing.T) {
 	}
 }
 
-func TestExportMIME(t *testing.T) {
+func TestGetExportMIME(t *testing.T) {
 	tests := []struct {
 		mime string
 		want string
@@ -33,18 +33,25 @@ func TestExportMIME(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.mime, func(t *testing.T) {
-			got, ok := ExportMIME[tt.mime]
+			got, ok := GetExportMIME(tt.mime)
 			if !ok {
-				t.Fatalf("ExportMIME[%q] not found", tt.mime)
+				t.Fatalf("GetExportMIME(%q) not found", tt.mime)
 			}
 			if got != tt.want {
-				t.Errorf("ExportMIME[%q] = %q, want %q", tt.mime, got, tt.want)
+				t.Errorf("GetExportMIME(%q) = %q, want %q", tt.mime, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestExportExtension(t *testing.T) {
+func TestGetExportMIME_Unknown(t *testing.T) {
+	_, ok := GetExportMIME("application/pdf")
+	if ok {
+		t.Error("GetExportMIME(application/pdf) should return false for unknown MIME type")
+	}
+}
+
+func TestGetExportExtension(t *testing.T) {
 	tests := []struct {
 		mime string
 		want string
@@ -55,18 +62,25 @@ func TestExportExtension(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.mime, func(t *testing.T) {
-			got, ok := ExportExtension[tt.mime]
+			got, ok := GetExportExtension(tt.mime)
 			if !ok {
-				t.Fatalf("ExportExtension[%q] not found", tt.mime)
+				t.Fatalf("GetExportExtension(%q) not found", tt.mime)
 			}
 			if got != tt.want {
-				t.Errorf("ExportExtension[%q] = %q, want %q", tt.mime, got, tt.want)
+				t.Errorf("GetExportExtension(%q) = %q, want %q", tt.mime, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestTypeLabel(t *testing.T) {
+func TestGetExportExtension_Unknown(t *testing.T) {
+	_, ok := GetExportExtension("application/pdf")
+	if ok {
+		t.Error("GetExportExtension(application/pdf) should return false for unknown MIME type")
+	}
+}
+
+func TestGetTypeLabel(t *testing.T) {
 	tests := []struct {
 		mime string
 		want string
@@ -77,18 +91,25 @@ func TestTypeLabel(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.mime, func(t *testing.T) {
-			got, ok := TypeLabel[tt.mime]
+			got, ok := GetTypeLabel(tt.mime)
 			if !ok {
-				t.Fatalf("TypeLabel[%q] not found", tt.mime)
+				t.Fatalf("GetTypeLabel(%q) not found", tt.mime)
 			}
 			if got != tt.want {
-				t.Errorf("TypeLabel[%q] = %q, want %q", tt.mime, got, tt.want)
+				t.Errorf("GetTypeLabel(%q) = %q, want %q", tt.mime, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestMarkdownExportMIME(t *testing.T) {
+func TestGetTypeLabel_Unknown(t *testing.T) {
+	_, ok := GetTypeLabel("application/pdf")
+	if ok {
+		t.Error("GetTypeLabel(application/pdf) should return false for unknown MIME type")
+	}
+}
+
+func TestGetMarkdownExportMIME(t *testing.T) {
 	tests := []struct {
 		mime string
 		want string
@@ -99,13 +120,37 @@ func TestMarkdownExportMIME(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.mime, func(t *testing.T) {
-			got, ok := MarkdownExportMIME[tt.mime]
+			got, ok := GetMarkdownExportMIME(tt.mime)
 			if !ok {
-				t.Fatalf("MarkdownExportMIME[%q] not found", tt.mime)
+				t.Fatalf("GetMarkdownExportMIME(%q) not found", tt.mime)
 			}
 			if got != tt.want {
-				t.Errorf("MarkdownExportMIME[%q] = %q, want %q", tt.mime, got, tt.want)
+				t.Errorf("GetMarkdownExportMIME(%q) = %q, want %q", tt.mime, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGetMarkdownExportMIME_Unknown(t *testing.T) {
+	_, ok := GetMarkdownExportMIME("application/pdf")
+	if ok {
+		t.Error("GetMarkdownExportMIME(application/pdf) should return false for unknown MIME type")
+	}
+}
+
+func TestSupportedMIMETypes(t *testing.T) {
+	types := SupportedMIMETypes()
+	if len(types) != 3 {
+		t.Fatalf("SupportedMIMETypes() returned %d types, want 3", len(types))
+	}
+	want := map[string]bool{
+		MIMEGoogleDoc:    true,
+		MIMEGoogleSheet:  true,
+		MIMEGoogleSlides: true,
+	}
+	for _, mt := range types {
+		if !want[mt] {
+			t.Errorf("SupportedMIMETypes() contains unexpected type %q", mt)
+		}
 	}
 }

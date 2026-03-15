@@ -9,31 +9,62 @@ const (
 	MIMEGoogleSlides = "application/vnd.google-apps.presentation"
 )
 
-// ExportMIME maps Google Workspace MIME types to their export MIME types.
-var ExportMIME = map[string]string{
+// unexported maps — callers use the accessor functions below.
+var exportMIME = map[string]string{
 	MIMEGoogleDoc:    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 	MIMEGoogleSheet:  "text/csv",
 	MIMEGoogleSlides: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 
-// ExportExtension maps Google Workspace MIME types to file extensions.
-var ExportExtension = map[string]string{
+var exportExtension = map[string]string{
 	MIMEGoogleDoc:    ".docx",
 	MIMEGoogleSheet:  ".csv",
 	MIMEGoogleSlides: ".pptx",
 }
 
-// TypeLabel maps Google Workspace MIME types to human-readable labels.
-var TypeLabel = map[string]string{
+var typeLabel = map[string]string{
 	MIMEGoogleDoc:    "Google Doc",
 	MIMEGoogleSheet:  "Google Sheet",
 	MIMEGoogleSlides: "Google Slides",
 }
 
-// MarkdownExportMIME maps Google Workspace MIME types to MIME types
-// suitable for markdown/text export.
-var MarkdownExportMIME = map[string]string{
+var markdownExportMIME = map[string]string{
 	MIMEGoogleDoc:    "text/html",
 	MIMEGoogleSheet:  "text/csv",
 	MIMEGoogleSlides: "text/plain",
+}
+
+// GetExportMIME returns the export MIME type for a Google Workspace MIME type.
+// The second return value reports whether the key was found.
+func GetExportMIME(mime string) (string, bool) {
+	v, ok := exportMIME[mime]
+	return v, ok
+}
+
+// GetExportExtension returns the file extension for a Google Workspace MIME type.
+// The second return value reports whether the key was found.
+func GetExportExtension(mime string) (string, bool) {
+	v, ok := exportExtension[mime]
+	return v, ok
+}
+
+// GetTypeLabel returns the human-readable label for a Google Workspace MIME type.
+// The second return value reports whether the key was found.
+func GetTypeLabel(mime string) (string, bool) {
+	v, ok := typeLabel[mime]
+	return v, ok
+}
+
+// GetMarkdownExportMIME returns the markdown/text export MIME type for a
+// Google Workspace MIME type. The second return value reports whether the key
+// was found.
+func GetMarkdownExportMIME(mime string) (string, bool) {
+	v, ok := markdownExportMIME[mime]
+	return v, ok
+}
+
+// SupportedMIMETypes returns the set of Google Workspace MIME types that this
+// package knows how to export. Useful for building Drive API query filters.
+func SupportedMIMETypes() []string {
+	return []string{MIMEGoogleDoc, MIMEGoogleSheet, MIMEGoogleSlides}
 }
