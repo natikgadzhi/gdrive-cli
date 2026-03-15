@@ -9,6 +9,8 @@ func TestFormatBytes(t *testing.T) {
 		input int64
 		want  string
 	}{
+		{-1, "0 B"},
+		{-1024, "0 B"},
 		{0, "0 B"},
 		{1, "1 B"},
 		{512, "512 B"},

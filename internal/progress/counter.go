@@ -77,7 +77,7 @@ func (c *Counter) render() {
 	if !c.enabled {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "\r%s", c.display())
+	fmt.Fprintf(os.Stderr, "\r\033[K%s", c.display())
 }
 
 // Done finalizes the counter display by writing a newline to stderr.
@@ -93,7 +93,11 @@ func (c *Counter) Done() {
 
 // FormatBytes converts a byte count into a human-readable string.
 // Uses decimal SI-like prefixes: B, KB, MB, GB.
+// Negative values are treated as zero.
 func FormatBytes(n int64) string {
+	if n < 0 {
+		n = 0
+	}
 	const (
 		kb = 1024
 		mb = 1024 * kb
