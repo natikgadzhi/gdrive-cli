@@ -9,58 +9,76 @@ const (
 	MIMEGoogleSlides = "application/vnd.google-apps.presentation"
 )
 
-// unexported maps — callers use the accessor functions below.
-var exportMIME = map[string]string{
-	MIMEGoogleDoc:    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-	MIMEGoogleSheet:  "text/csv",
-	MIMEGoogleSlides: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+// mimeInfo holds all export metadata for a single Google Workspace MIME type.
+type mimeInfo struct {
+	ExportMIME         string
+	Extension          string
+	Label              string
+	MarkdownExportMIME string
 }
 
-var exportExtension = map[string]string{
-	MIMEGoogleDoc:    ".docx",
-	MIMEGoogleSheet:  ".csv",
-	MIMEGoogleSlides: ".pptx",
-}
-
-var typeLabel = map[string]string{
-	MIMEGoogleDoc:    "Google Doc",
-	MIMEGoogleSheet:  "Google Sheet",
-	MIMEGoogleSlides: "Google Slides",
-}
-
-var markdownExportMIME = map[string]string{
-	MIMEGoogleDoc:    "text/html",
-	MIMEGoogleSheet:  "text/csv",
-	MIMEGoogleSlides: "text/plain",
+// mimeRegistry maps each Google Workspace MIME type to its export metadata.
+// All per-type data lives in one place, so new types only need a single entry.
+var mimeRegistry = map[string]mimeInfo{
+	MIMEGoogleDoc: {
+		ExportMIME:         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		Extension:          ".docx",
+		Label:              "Google Doc",
+		MarkdownExportMIME: "text/html",
+	},
+	MIMEGoogleSheet: {
+		ExportMIME:         "text/csv",
+		Extension:          ".csv",
+		Label:              "Google Sheet",
+		MarkdownExportMIME: "text/csv",
+	},
+	MIMEGoogleSlides: {
+		ExportMIME:         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		Extension:          ".pptx",
+		Label:              "Google Slides",
+		MarkdownExportMIME: "text/plain",
+	},
 }
 
 // GetExportMIME returns the export MIME type for a Google Workspace MIME type.
 // The second return value reports whether the key was found.
 func GetExportMIME(mime string) (string, bool) {
-	v, ok := exportMIME[mime]
-	return v, ok
+	info, ok := mimeRegistry[mime]
+	if !ok {
+		return "", false
+	}
+	return info.ExportMIME, true
 }
 
 // GetExportExtension returns the file extension for a Google Workspace MIME type.
 // The second return value reports whether the key was found.
 func GetExportExtension(mime string) (string, bool) {
-	v, ok := exportExtension[mime]
-	return v, ok
+	info, ok := mimeRegistry[mime]
+	if !ok {
+		return "", false
+	}
+	return info.Extension, true
 }
 
 // GetTypeLabel returns the human-readable label for a Google Workspace MIME type.
 // The second return value reports whether the key was found.
 func GetTypeLabel(mime string) (string, bool) {
-	v, ok := typeLabel[mime]
-	return v, ok
+	info, ok := mimeRegistry[mime]
+	if !ok {
+		return "", false
+	}
+	return info.Label, true
 }
 
 // GetMarkdownExportMIME returns the markdown/text export MIME type for a
 // Google Workspace MIME type. The second return value reports whether the key
 // was found.
 func GetMarkdownExportMIME(mime string) (string, bool) {
-	v, ok := markdownExportMIME[mime]
-	return v, ok
+	info, ok := mimeRegistry[mime]
+	if !ok {
+		return "", false
+	}
+	return info.MarkdownExportMIME, true
 }
 
 // SupportedMIMETypes returns the set of Google Workspace MIME types that this
