@@ -33,8 +33,10 @@ type RetryTransport struct {
 	BaseDelay  time.Duration
 	MaxDelay   time.Duration
 
-	// sleepFunc is an override for time.Sleep, used in tests.
-	sleepFunc func(time.Duration)
+	// timerFunc returns a channel that fires after the given duration.
+	// Defaults to time.After. Override in tests to avoid real sleeps
+	// while still recording requested delays.
+	timerFunc func(time.Duration) <-chan time.Time
 }
 
 // NewRetryTransport creates a RetryTransport wrapping the given
@@ -53,9 +55,9 @@ func NewRetryTransport(base http.RoundTripper) *RetryTransport {
 // HTTP-date formats). On each retry the response body is drained
 // and closed before sleeping.
 func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	sleep := t.sleepFunc
-	if sleep == nil {
-		sleep = time.Sleep
+	timer := t.timerFunc
+	if timer == nil {
+		timer = time.After
 	}
 
 	var resp *http.Response
@@ -87,18 +89,9 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		config.DebugLog("rate limit: HTTP 429 on attempt %d/%d, retrying in %s", attempt+1, t.MaxRetries, delay)
 
 		select {
+		case <-timer(delay):
 		case <-req.Context().Done():
 			return nil, req.Context().Err()
-		case <-func() <-chan time.Time {
-			// Use a channel driven by sleep so tests can
-			// override timing.
-			ch := make(chan time.Time, 1)
-			go func() {
-				sleep(delay)
-				ch <- time.Now()
-			}()
-			return ch
-		}():
 		}
 	}
 

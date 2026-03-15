@@ -116,7 +116,11 @@ func TestRetryTransport_SuccessNoRetry(t *testing.T) {
 	}}
 
 	rt := NewRetryTransport(inner)
-	rt.sleepFunc = func(d time.Duration) {} // no-op sleep
+	rt.timerFunc = func(d time.Duration) <-chan time.Time { // instant timer
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
 
 	resp, err := rt.RoundTrip(newRequest())
 	if err != nil {
@@ -141,7 +145,11 @@ func TestRetryTransport_TransientThenSuccess(t *testing.T) {
 	}}
 
 	rt := NewRetryTransport(inner)
-	rt.sleepFunc = func(d time.Duration) {} // no-op sleep
+	rt.timerFunc = func(d time.Duration) <-chan time.Time { // instant timer
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
 
 	resp, err := rt.RoundTrip(newRequest())
 	if err != nil {
@@ -165,7 +173,11 @@ func TestRetryTransport_MaxRetriesExceeded(t *testing.T) {
 
 	rt := NewRetryTransport(inner)
 	rt.MaxRetries = 3
-	rt.sleepFunc = func(d time.Duration) {} // no-op sleep
+	rt.timerFunc = func(d time.Duration) <-chan time.Time { // instant timer
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
 
 	resp, err := rt.RoundTrip(newRequest())
 	if err != nil {
@@ -195,10 +207,13 @@ func TestRetryTransport_RetryAfterSeconds(t *testing.T) {
 	}}
 
 	rt := NewRetryTransport(inner)
-	rt.sleepFunc = func(d time.Duration) {
+	rt.timerFunc = func(d time.Duration) <-chan time.Time {
 		mu.Lock()
 		sleepDurations = append(sleepDurations, d)
 		mu.Unlock()
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
 	}
 
 	resp, err := rt.RoundTrip(newRequest())
@@ -238,10 +253,13 @@ func TestRetryTransport_ExponentialBackoff(t *testing.T) {
 	rt.MaxRetries = 4
 	rt.BaseDelay = 100 * time.Millisecond
 	rt.MaxDelay = 10 * time.Second
-	rt.sleepFunc = func(d time.Duration) {
+	rt.timerFunc = func(d time.Duration) <-chan time.Time {
 		mu.Lock()
 		sleepDurations = append(sleepDurations, d)
 		mu.Unlock()
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
 	}
 
 	resp, err := rt.RoundTrip(newRequest())
@@ -279,7 +297,11 @@ func TestRetryTransport_PropagatesTransportError(t *testing.T) {
 	}}
 
 	rt := NewRetryTransport(inner)
-	rt.sleepFunc = func(d time.Duration) {}
+	rt.timerFunc = func(d time.Duration) <-chan time.Time {
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
 
 	_, err := rt.RoundTrip(newRequest())
 	if err == nil || !strings.Contains(err.Error(), "network error") {
@@ -302,7 +324,11 @@ func TestComposable_RetryWrapsRateLimit(t *testing.T) {
 	// Compose: retry -> rate-limit -> fake
 	rl := NewRateLimitedTransport(inner, 100) // high rps so test is fast
 	rt := NewRetryTransport(rl)
-	rt.sleepFunc = func(d time.Duration) {}
+	rt.timerFunc = func(d time.Duration) <-chan time.Time {
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
 
 	resp, err := rt.RoundTrip(newRequest())
 	if err != nil {
