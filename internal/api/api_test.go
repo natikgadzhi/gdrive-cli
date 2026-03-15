@@ -66,6 +66,10 @@ func TestSearchFiles_Success(t *testing.T) {
 		if !strings.Contains(q, "mimeType=") {
 			t.Errorf("expected query to contain mimeType filter, got: %s", q)
 		}
+		// Verify trashed filter is present.
+		if !strings.Contains(q, "trashed = false") {
+			t.Errorf("expected query to contain 'trashed = false', got: %s", q)
+		}
 
 		// Verify orderBy.
 		orderBy := r.URL.Query().Get("orderBy")
@@ -180,6 +184,10 @@ func TestSearchFiles_QueryEscaping(t *testing.T) {
 	// The query should contain the escaped single quote.
 	if !strings.Contains(capturedQuery, `it\'s a test`) {
 		t.Errorf("expected escaped query, got: %s", capturedQuery)
+	}
+	// Verify trashed filter is present.
+	if !strings.Contains(capturedQuery, "trashed = false") {
+		t.Errorf("expected query to contain 'trashed = false', got: %s", capturedQuery)
 	}
 }
 
