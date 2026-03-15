@@ -14,7 +14,7 @@ import (
 // ExportFile exports a Google Workspace file to the specified MIME type
 // and writes the result to outputPath. Parent directories are created
 // automatically if they do not exist.
-func ExportFile(svc *drive.Service, fileID string, mimeType string, outputPath string) error {
+func ExportFile(svc *drive.Service, fileID, mimeType, outputPath string) error {
 	config.DebugLog("Exporting file %s as %s to %s", fileID, mimeType, outputPath)
 
 	resp, err := svc.Files.Export(fileID, mimeType).Download()

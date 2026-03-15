@@ -26,6 +26,22 @@ func newTestService(t *testing.T, server *httptest.Server) *drive.Service {
 	return svc
 }
 
+// jsonErrorHandler returns an http.HandlerFunc that responds with the given
+// HTTP status code and a JSON error body. Useful for API error tests.
+func jsonErrorHandler(code int, message string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		resp := map[string]any{
+			"error": map[string]any{
+				"code":    code,
+				"message": message,
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
 // --- Search tests ---
 
 func TestSearchFiles_Success(t *testing.T) {
@@ -168,17 +184,7 @@ func TestSearchFiles_QueryEscaping(t *testing.T) {
 }
 
 func TestSearchFiles_APIError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		resp := map[string]any{
-			"error": map[string]any{
-				"code":    403,
-				"message": "Insufficient Permission",
-			},
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
+	server := httptest.NewServer(jsonErrorHandler(http.StatusForbidden, "Insufficient Permission"))
 	defer server.Close()
 
 	svc := newTestService(t, server)
@@ -269,17 +275,7 @@ func TestExportFile_CreatesParentDirs(t *testing.T) {
 }
 
 func TestExportFile_APIError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		resp := map[string]any{
-			"error": map[string]any{
-				"code":    404,
-				"message": "File not found",
-			},
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
+	server := httptest.NewServer(jsonErrorHandler(http.StatusNotFound, "File not found"))
 	defer server.Close()
 
 	svc := newTestService(t, server)
@@ -355,17 +351,7 @@ func TestGetFileMetadata_Success(t *testing.T) {
 }
 
 func TestGetFileMetadata_NotFound(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		resp := map[string]any{
-			"error": map[string]any{
-				"code":    404,
-				"message": "File not found: notfound",
-			},
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
+	server := httptest.NewServer(jsonErrorHandler(http.StatusNotFound, "File not found: notfound"))
 	defer server.Close()
 
 	svc := newTestService(t, server)
@@ -380,17 +366,7 @@ func TestGetFileMetadata_NotFound(t *testing.T) {
 }
 
 func TestGetFileMetadata_Forbidden(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		resp := map[string]any{
-			"error": map[string]any{
-				"code":    403,
-				"message": "Insufficient Permission",
-			},
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
+	server := httptest.NewServer(jsonErrorHandler(http.StatusForbidden, "Insufficient Permission"))
 	defer server.Close()
 
 	svc := newTestService(t, server)
