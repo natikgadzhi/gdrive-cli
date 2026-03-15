@@ -364,3 +364,55 @@ func TestParseRetryAfter_ZeroSeconds(t *testing.T) {
 		t.Fatalf("expected 0, got %s", d)
 	}
 }
+
+// --- Edge case: zero and negative RPS ------------------------------------
+
+func TestRateLimitedTransport_ZeroRPS(t *testing.T) {
+	// Zero RPS should not block — rate limiting is disabled.
+	var calls int64
+	inner := &fakeTransport{fn: func(r *http.Request) (*http.Response, error) {
+		atomic.AddInt64(&calls, 1)
+		return okResponse(), nil
+	}}
+
+	rl := NewRateLimitedTransport(inner, 0)
+
+	for i := 0; i < 10; i++ {
+		resp, err := rl.RoundTrip(newRequest())
+		if err != nil {
+			t.Fatalf("RoundTrip %d failed: %v", i, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+	}
+
+	if got := atomic.LoadInt64(&calls); got != 10 {
+		t.Errorf("expected 10 calls, got %d", got)
+	}
+}
+
+func TestRateLimitedTransport_NegativeRPS(t *testing.T) {
+	// Negative RPS should not block — rate limiting is disabled.
+	var calls int64
+	inner := &fakeTransport{fn: func(r *http.Request) (*http.Response, error) {
+		atomic.AddInt64(&calls, 1)
+		return okResponse(), nil
+	}}
+
+	rl := NewRateLimitedTransport(inner, -5)
+
+	for i := 0; i < 5; i++ {
+		resp, err := rl.RoundTrip(newRequest())
+		if err != nil {
+			t.Fatalf("RoundTrip %d failed: %v", i, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+	}
+
+	if got := atomic.LoadInt64(&calls); got != 5 {
+		t.Errorf("expected 5 calls, got %d", got)
+	}
+}

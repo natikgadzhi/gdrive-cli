@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 )
@@ -102,10 +103,9 @@ func TestOK(t *testing.T) {
 }
 
 func TestErrorf(t *testing.T) {
+	var retErr error
 	out := captureStdout(t, func() {
-		if err := Errorf("failed: %s", "bad input"); err != nil {
-			t.Fatalf("Errorf returned error: %v", err)
-		}
+		retErr = Errorf("failed: %s", "bad input")
 	})
 
 	var result StatusMessage
@@ -117,5 +117,37 @@ func TestErrorf(t *testing.T) {
 	}
 	if result.Message != "failed: bad input" {
 		t.Errorf("expected message='failed: bad input', got %q", result.Message)
+	}
+
+	// Errorf must return a non-nil SilentError so Cobra exits with code 1.
+	if retErr == nil {
+		t.Fatal("Errorf should return a non-nil error")
+	}
+	if !IsSilentError(retErr) {
+		t.Errorf("Errorf should return a SilentError, got %T", retErr)
+	}
+	if retErr.Error() != "failed: bad input" {
+		t.Errorf("SilentError.Error() = %q, want %q", retErr.Error(), "failed: bad input")
+	}
+}
+
+func TestSilentError(t *testing.T) {
+	err := &SilentError{Message: "test error"}
+
+	if err.Error() != "test error" {
+		t.Errorf("SilentError.Error() = %q, want %q", err.Error(), "test error")
+	}
+
+	if !IsSilentError(err) {
+		t.Error("IsSilentError should return true for *SilentError")
+	}
+
+	if IsSilentError(nil) {
+		t.Error("IsSilentError should return false for nil")
+	}
+
+	otherErr := fmt.Errorf("some other error")
+	if IsSilentError(otherErr) {
+		t.Error("IsSilentError should return false for non-SilentError")
 	}
 }
