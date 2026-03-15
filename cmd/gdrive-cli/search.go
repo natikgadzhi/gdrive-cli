@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
@@ -13,8 +16,8 @@ var searchCount int
 
 // searchResponse is the JSON envelope for search results.
 type searchResponse struct {
-	Query   string             `json:"query"`
-	Count   int                `json:"count"`
+	Query   string           `json:"query"`
+	Count   int              `json:"count"`
 	Results []api.FileResult `json:"results"`
 }
 
@@ -51,6 +54,22 @@ var searchCmd = &cobra.Command{
 		results, err := api.SearchFiles(svc, query, searchCount)
 		if err != nil {
 			return output.Errorf("Search failed: %s", err)
+		}
+
+		// Markdown table output.
+		if outputFormat == output.FormatMarkdown {
+			spinner.Stop()
+			fmt.Fprintf(os.Stdout, "# Search: %s\n\n", query)
+			fmt.Fprintf(os.Stdout, "**%d results**\n\n", len(results))
+			if len(results) > 0 {
+				fmt.Fprintln(os.Stdout, "| Name | Type | Modified | URL |")
+				fmt.Fprintln(os.Stdout, "|------|------|----------|-----|")
+				for _, r := range results {
+					fmt.Fprintf(os.Stdout, "| %s | %s | %s | %s |\n",
+						r.Name, r.Type, r.Modified, r.URL)
+				}
+			}
+			return nil
 		}
 
 		return output.PrintJSON(searchResponse{

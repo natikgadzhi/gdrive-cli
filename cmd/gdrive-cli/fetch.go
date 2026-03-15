@@ -1,15 +1,20 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
+	"github.com/natikgadzhi/gdrive-cli/internal/cache"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
 	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
 	"github.com/natikgadzhi/gdrive-cli/internal/output"
 	"github.com/natikgadzhi/gdrive-cli/internal/progress"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -19,11 +24,12 @@ var (
 
 // fetchResult is the JSON output for a successful fetch.
 type fetchResult struct {
-	Status  string `json:"status"`
-	FileID  string `json:"file_id"`
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	SavedTo string `json:"saved_to"`
+	Status   string `json:"status"`
+	FileID   string `json:"file_id"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	SavedTo  string `json:"saved_to"`
+	CachedTo string `json:"cached_to,omitempty"`
 }
 
 var fetchCmd = &cobra.Command{
@@ -97,22 +103,73 @@ The output filename is auto-generated from the document title unless
 		}
 		config.DebugLog("Output path: %s", outputPath)
 
-		// Export the file.
+		// Export the file in its native format (docx/csv/pptx).
 		spin.UpdateMessage("Downloading " + metadata.Name + "...")
 
 		if err := api.ExportFile(svc, fileID, exportMIME, outputPath); err != nil {
 			return output.Errorf("Failed to export file: %s", err)
 		}
 
+		// Export as markdown/text for the cache.
+		spin.UpdateMessage("Caching " + metadata.Name + "...")
+
+		mdContent, err := output.ExportAsMarkdown(svc, fileID, metadata.MimeType)
+		if err != nil {
+			// Cache failure is non-fatal — log it and continue.
+			config.DebugLog("Warning: failed to export markdown for cache: %v", err)
+		}
+
+		var cachedTo string
+		if mdContent != "" {
+			now := time.Now().UTC()
+			slug := cache.GenerateSlug(metadata.Name, fileID)
+			entry := cache.CacheEntry{
+				Tool:        "gdrive-cli",
+				Name:        metadata.Name,
+				Slug:        slug,
+				Type:        typeLabel,
+				FileID:      fileID,
+				SourceURL:   rawURL,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+				RequestedBy: "cli",
+				Body:        mdContent,
+			}
+
+			cacheDir := config.CacheDir()
+			cachedPath, err := cache.Store(cacheDir, entry)
+			if err != nil {
+				config.DebugLog("Warning: failed to write cache: %v", err)
+			} else {
+				cachedTo = cachedPath
+				config.DebugLog("Cached to: %s", cachedTo)
+			}
+
+			// If markdown format requested, print the cached content to stdout.
+			if outputFormat == output.FormatMarkdown {
+				spin.Stop()
+				fm, err := yaml.Marshal(entry)
+				if err != nil {
+					return output.Errorf("Failed to marshal frontmatter: %s", err)
+				}
+				fmt.Fprint(os.Stdout, "---\n")
+				os.Stdout.Write(fm)
+				fmt.Fprint(os.Stdout, "---\n")
+				fmt.Fprint(os.Stdout, mdContent)
+				return nil
+			}
+		}
+
 		// Stop spinner before printing to clear the terminal line.
 		spin.Stop()
 
 		return output.PrintJSON(fetchResult{
-			Status:  "ok",
-			FileID:  fileID,
-			Name:    metadata.Name,
-			Type:    typeLabel,
-			SavedTo: outputPath,
+			Status:   "ok",
+			FileID:   fileID,
+			Name:     metadata.Name,
+			Type:     typeLabel,
+			SavedTo:  outputPath,
+			CachedTo: cachedTo,
 		})
 	},
 }
