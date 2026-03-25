@@ -4,15 +4,13 @@ go 1.26.1
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0
-	github.com/natikgadzhi/cli-kit v0.0.0
+	github.com/natikgadzhi/cli-kit v0.0.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/time v0.15.0
 	google.golang.org/api v0.271.0
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-replace github.com/natikgadzhi/cli-kit => ../template/cli-kit
 
 require (
 	cloud.google.com/go/auth v0.18.2 // indirect
