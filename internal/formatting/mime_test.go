@@ -189,6 +189,7 @@ func TestResolveExportFormat_ValidFormats(t *testing.T) {
 		{MIMEGoogleSheet, "csv", ".csv", false},
 		{MIMEGoogleSlides, "pptx", ".pptx", false},
 		{MIMEGoogleSlides, "md", ".md", false},
+		{MIMEGoogleSlides, "pdf", ".pdf", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.mime+"/"+tt.format, func(t *testing.T) {
@@ -217,6 +218,7 @@ func TestResolveExportFormat_DotPrefixedFormats(t *testing.T) {
 		{MIMEGoogleSheet, ".csv", ".csv"},
 		{MIMEGoogleSlides, ".pptx", ".pptx"},
 		{MIMEGoogleSlides, ".md", ".md"},
+		{MIMEGoogleSlides, ".pdf", ".pdf"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.mime+"/"+tt.format, func(t *testing.T) {
@@ -258,5 +260,21 @@ func TestResolveExportFormat_UnsupportedMIME(t *testing.T) {
 	_, err := ResolveExportFormat("application/pdf", "docx")
 	if err == nil {
 		t.Error("ResolveExportFormat(application/pdf, docx) expected error, got nil")
+	}
+}
+
+func TestResolveExportFormat_SlidesPDF(t *testing.T) {
+	info, err := ResolveExportFormat(MIMEGoogleSlides, "pdf")
+	if err != nil {
+		t.Fatalf("ResolveExportFormat(Slides, pdf) error: %v", err)
+	}
+	if info.Extension != ".pdf" {
+		t.Errorf("extension = %q, want %q", info.Extension, ".pdf")
+	}
+	if info.ExportMIME != "application/pdf" {
+		t.Errorf("ExportMIME = %q, want %q", info.ExportMIME, "application/pdf")
+	}
+	if info.NeedsMarkdownConversion {
+		t.Error("NeedsMarkdownConversion should be false for PDF export")
 	}
 }
