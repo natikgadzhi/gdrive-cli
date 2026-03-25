@@ -19,8 +19,8 @@ func TestAuthCommandRegistered(t *testing.T) {
 
 func TestAuthSubcommandsRegistered(t *testing.T) {
 	subcommands := map[string]bool{
-		"login":  false,
-		"status": false,
+		"login": false,
+		"check": false,
 	}
 
 	for _, cmd := range authCmd.Commands() {
@@ -43,7 +43,7 @@ func TestAuthCommandHasHelp(t *testing.T) {
 	if authLoginCmd.Short == "" {
 		t.Error("auth login command should have a short description")
 	}
-	if authStatusCmd.Short == "" {
-		t.Error("auth status command should have a short description")
+	if authCheckCmd.Short == "" {
+		t.Error("auth check command should have a short description")
 	}
 }

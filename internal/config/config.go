@@ -76,16 +76,3 @@ func TokenFile() string {
 	return TokenFileIn(ConfigDir())
 }
 
-// CacheDir returns the directory for cached data.
-// It checks the GDRIVE_CACHE_DIR environment variable first,
-// falling back to ~/.local/share/gdrive-cli/cache.
-func CacheDir() string {
-	if dir := os.Getenv("GDRIVE_CACHE_DIR"); dir != "" {
-		return dir
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".", ".local", "share", "gdrive-cli", "cache")
-	}
-	return filepath.Join(home, ".local", "share", "gdrive-cli", "cache")
-}

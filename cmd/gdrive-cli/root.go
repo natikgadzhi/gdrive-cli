@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
+	clioutput "github.com/natikgadzhi/cli-kit/output"
+	"github.com/natikgadzhi/cli-kit/version"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
-	"github.com/natikgadzhi/gdrive-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -18,11 +20,44 @@ var (
 )
 
 var (
-	debug      bool
-	formatFlag string
-	// outputFormat is the parsed output format, set in PersistentPreRunE.
-	outputFormat output.Format
+	debug   bool
+	noCache bool
 )
+
+// versionInfo is populated in init() from ldflags variables.
+var versionInfo = &version.Info{
+	Version: "dev",
+	Commit:  "dev",
+	Date:    "unknown",
+}
+
+// SilentError is a sentinel error returned after an error has already been
+// printed. Cobra's RunE should return this to signal a non-zero exit code
+// without Cobra printing its own error message.
+type SilentError struct {
+	Message  string
+	ExitCode int
+}
+
+func (e *SilentError) Error() string {
+	return e.Message
+}
+
+// IsSilentError reports whether err is (or wraps) a SilentError.
+func IsSilentError(err error) bool {
+	_, ok := err.(*SilentError)
+	return ok
+}
+
+// cliError creates a CLIError, prints it to stderr, and returns a SilentError
+// that carries the appropriate exit code.
+func cliError(exitCode int, format string, cmd *cobra.Command, args ...any) error {
+	msg := fmt.Sprintf(format, args...)
+	outputFormat := clioutput.Resolve(cmd)
+	cliErr := clierrors.NewCLIError(exitCode, msg)
+	clierrors.PrintError(cliErr, clioutput.IsJSON(outputFormat))
+	return &SilentError{Message: msg, ExitCode: exitCode}
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "gdrive-cli",
@@ -30,30 +65,42 @@ var rootCmd = &cobra.Command{
 	Long:  "A command-line tool to search and download Google Docs, Sheets, and Slides via the Google Drive API.",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		config.SetDebug(debug)
-		f, err := output.ParseFormat(formatFlag)
-		if err != nil {
-			return output.Errorf("invalid format %q: must be \"json\" or \"markdown\"", formatFlag)
-		}
-		outputFormat = f
 		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Help()
 	},
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
 
 func init() {
+	// Populate versionInfo from ldflags.
+	versionInfo.Version = Version
+	versionInfo.Commit = Commit
+	versionInfo.Date = Date
+
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Print verbose debug logs to stderr")
-	rootCmd.PersistentFlags().StringVar(&formatFlag, "format", "json", "Output format: json or markdown")
+	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "Skip writing to derived directory")
+
+	// Register cli-kit flags.
+	clioutput.RegisterFlag(rootCmd)
+
+	// Register version command and --version flag.
+	rootCmd.AddCommand(version.NewCommand(versionInfo))
+	version.SetupFlag(rootCmd, versionInfo)
 }
 
 // Execute runs the root command.
 func Execute() error {
 	if err := rootCmd.Execute(); err != nil {
-		// SilentError means the JSON error was already written to stdout.
-		// Do not print it again to stderr.
-		if !output.IsSilentError(err) {
-			fmt.Fprintln(os.Stderr, err)
+		if se, ok := err.(*SilentError); ok {
+			if se.ExitCode != 0 {
+				os.Exit(se.ExitCode)
+			}
+			return err
 		}
+		fmt.Fprintln(os.Stderr, err)
 		return err
 	}
 	return nil

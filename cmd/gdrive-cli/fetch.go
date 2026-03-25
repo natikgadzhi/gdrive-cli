@@ -5,17 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
+	"github.com/natikgadzhi/cli-kit/derived"
+	clioutput "github.com/natikgadzhi/cli-kit/output"
+	cliprogress "github.com/natikgadzhi/cli-kit/progress"
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/cache"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
 	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
 	"github.com/natikgadzhi/gdrive-cli/internal/output"
-	"github.com/natikgadzhi/gdrive-cli/internal/progress"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -33,12 +34,18 @@ type fetchResult struct {
 	CachedTo string `json:"cached_to,omitempty"`
 }
 
+// RenderTable implements cli-kit TableRenderer.
+func (r fetchResult) RenderTable(t *clioutput.Table) {
+	t.Header("Status", "File ID", "Name", "Type", "Saved To", "Cached To")
+	t.Row(r.Status, r.FileID, r.Name, r.Type, r.SavedTo, r.CachedTo)
+}
+
 var fetchCmd = &cobra.Command{
 	Use:   "fetch <url>",
 	Short: "Download a Google Doc, Sheet, or Slides file",
 	Long: `Downloads a Google Doc, Sheet, or Slides file and saves it locally.
 
-Use --output / -o to choose the file format for the download. If omitted,
+Use --export / -e to choose the file format for the download. If omitted,
 the default native format is used.
 
 Export formats per document type:
@@ -46,7 +53,7 @@ Export formats per document type:
   Google Sheet  : csv  (default)
   Google Slides : pptx (default), md
 
-When --output md (or -o md) is used:
+When --export md (or -e md) is used:
   - Google Docs are exported as HTML and converted to Markdown (.md)
   - Google Slides are exported as plain text and saved as .md
 
@@ -56,61 +63,65 @@ Use --dest / -f to control where the file is saved:
   - If set to a directory (path ends with / or is an existing directory),
     the file is saved in that directory with an auto-generated name.
   - Otherwise, it is used as the explicit output file path.`,
+	Example: `  gdrive-cli fetch https://docs.google.com/document/d/1abc.../edit
+  gdrive-cli fetch https://docs.google.com/spreadsheets/d/1abc.../edit -e csv
+  gdrive-cli fetch https://docs.google.com/document/d/1abc.../edit -e md -f ./output/`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("requires a Google Docs/Sheets/Slides URL\n\nUsage: gdrive-cli fetch <url> [-o FORMAT] [--dest PATH]\n\nSupported URL formats:\n  https://docs.google.com/document/d/<ID>/...\n  https://docs.google.com/spreadsheets/d/<ID>/...\n  https://docs.google.com/presentation/d/<ID>/...")
+			return fmt.Errorf("requires a Google Docs/Sheets/Slides URL\n\nUsage: gdrive-cli fetch <url> [-e FORMAT] [--dest PATH]\n\nSupported URL formats:\n  https://docs.google.com/document/d/<ID>/...\n  https://docs.google.com/spreadsheets/d/<ID>/...\n  https://docs.google.com/presentation/d/<ID>/...")
 		}
 		return cobra.ExactArgs(1)(cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		rawURL := args[0]
+		format := clioutput.Resolve(cmd)
 
 		// Parse the Google Drive URL to extract the file ID.
 		fileID, err := formatting.ParseGoogleURL(rawURL)
 		if err != nil {
-			return output.Errorf("%s", err)
+			return cliError(clierrors.ExitError, "%s", cmd, err)
 		}
 		config.DebugLog("Parsed file ID: %s", fileID)
 
 		// Authenticate.
 		token, oauthConfig, err := auth.GetCredentials(config.ConfigDir())
 		if err != nil {
-			return output.Errorf("Authentication failed: %s", err)
+			return cliError(clierrors.ExitAuthError, "Authentication failed: %s", cmd, err)
 		}
 
 		// Create Drive service.
 		svc, err := api.NewDriveService(token, oauthConfig)
 		if err != nil {
-			return output.Errorf("Failed to create Drive service: %s", err)
+			return cliError(clierrors.ExitError, "Failed to create Drive service: %s", cmd, err)
 		}
 
 		// Fetch file metadata.
-		spin := progress.NewSpinner("Fetching file metadata...")
-		spin.Start()
-		defer spin.Stop()
+		spin := cliprogress.NewSpinner("Fetching file metadata...", format)
+		spin.Update(0)
+		defer spin.Finish()
 
 		metadata, err := api.GetFileMetadata(svc, fileID)
 		if err != nil {
-			return output.Errorf("Failed to get file metadata: %s", err)
+			return cliError(clierrors.ExitError, "Failed to get file metadata: %s", cmd, err)
 		}
 		config.DebugLog("File: %s (MIME: %s)", metadata.Name, metadata.MimeType)
 
 		// Check that this is a supported Google Workspace type at all.
 		_, supportedType := formatting.GetExportMIME(metadata.MimeType)
 		if !supportedType {
-			return output.Errorf(
+			return cliError(clierrors.ExitError,
 				"Unsupported file type: %s\n\nSupported types:\n"+
 					"  Google Doc    (application/vnd.google-apps.document)\n"+
 					"  Google Sheet  (application/vnd.google-apps.spreadsheet)\n"+
 					"  Google Slides (application/vnd.google-apps.presentation)",
-				metadata.MimeType,
+				cmd, metadata.MimeType,
 			)
 		}
 
 		// Resolve the requested export format against the document type.
 		resolved, err := formatting.ResolveExportFormat(metadata.MimeType, fetchExportFormat)
 		if err != nil {
-			return output.Errorf("%s", err)
+			return cliError(clierrors.ExitError, "%s", cmd, err)
 		}
 
 		exportMIME := resolved.ExportMIME
@@ -123,73 +134,55 @@ Use --dest / -f to control where the file is saved:
 		outputPath := resolveOutputPath(fetchDest, metadata.Name, extension)
 		config.DebugLog("Output path: %s", outputPath)
 
-		// Build the CacheEntry once so both writeCacheEntry and
-		// printMarkdownOutput share the same timestamps.
-		now := time.Now().UTC()
+		// Build slug for derived directory.
 		slug := cache.GenerateSlug(metadata.Name, fileID)
-		cacheEntry := cache.CacheEntry{
-			Tool:        "gdrive-cli",
-			Name:        metadata.Name,
-			Slug:        slug,
-			Type:        typeLabel,
-			FileID:      fileID,
-			SourceURL:   rawURL,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-			RequestedBy: "cli",
-		}
 
 		// When exporting as markdown, use the markdown export path which
 		// handles HTML-to-markdown conversion for Docs.
 		if resolved.NeedsMarkdownConversion {
-			spin.UpdateMessage("Exporting " + metadata.Name + " as markdown...")
+			spin.Update(0)
 
 			mdContent, err := output.ExportAsMarkdown(svc, fileID, metadata.MimeType)
 			if err != nil {
-				return output.Errorf("Failed to export as markdown: %s", err)
+				return cliError(clierrors.ExitError, "Failed to export as markdown: %s", cmd, err)
 			}
 
 			// Write the markdown content to the output file.
 			dir := filepath.Dir(outputPath)
 			if err := os.MkdirAll(dir, 0o755); err != nil {
-				return output.Errorf("Failed to create output directory %s: %s", dir, err)
+				return cliError(clierrors.ExitError, "Failed to create output directory %s: %s", cmd, dir, err)
 			}
 			if err := os.WriteFile(outputPath, []byte(mdContent), 0o644); err != nil {
-				return output.Errorf("Failed to write output file: %s", err)
+				return cliError(clierrors.ExitError, "Failed to write output file: %s", cmd, err)
 			}
 
-			// Cache the markdown content (same content as the file we just wrote).
-			cacheEntry.Body = mdContent
-			spin.UpdateMessage("Caching " + metadata.Name + "...")
-			cachedTo := writeCacheEntry(cacheEntry)
-
-			// If the global --format is markdown, print frontmatter + content to stdout.
-			if outputFormat == output.FormatMarkdown {
-				spin.Stop()
-				printMarkdownOutput(cacheEntry)
-				return nil
+			// Cache to derived directory.
+			var cachedTo string
+			if !noCache {
+				cachedTo = writeDerivedFile(cmd, slug, typeLabel, rawURL, mdContent)
 			}
 
-			spin.Stop()
-			return output.PrintJSON(fetchResult{
+			spin.Finish()
+			result := fetchResult{
 				Status:   "ok",
 				FileID:   fileID,
 				Name:     metadata.Name,
 				Type:     typeLabel,
 				SavedTo:  outputPath,
 				CachedTo: cachedTo,
-			})
+			}
+			return clioutput.Print(format, result, result)
 		}
 
 		// Native export path (docx/csv/pptx).
-		spin.UpdateMessage("Downloading " + metadata.Name + "...")
+		spin.Update(0)
 
 		if err := api.ExportFile(svc, fileID, exportMIME, outputPath); err != nil {
-			return output.Errorf("Failed to export file: %s", err)
+			return cliError(clierrors.ExitError, "Failed to export file: %s", cmd, err)
 		}
 
-		// Export as markdown/text for the cache.
-		spin.UpdateMessage("Caching " + metadata.Name + "...")
+		// Export as markdown/text for the derived directory.
+		spin.Update(0)
 
 		mdContent, err := output.ExportAsMarkdown(svc, fileID, metadata.MimeType)
 		if err != nil {
@@ -198,29 +191,22 @@ Use --dest / -f to control where the file is saved:
 		}
 
 		var cachedTo string
-		if mdContent != "" {
-			cacheEntry.Body = mdContent
-			cachedTo = writeCacheEntry(cacheEntry)
-
-			// If markdown format requested, print the cached content to stdout.
-			if outputFormat == output.FormatMarkdown {
-				spin.Stop()
-				printMarkdownOutput(cacheEntry)
-				return nil
-			}
+		if mdContent != "" && !noCache {
+			cachedTo = writeDerivedFile(cmd, slug, typeLabel, rawURL, mdContent)
 		}
 
-		// Stop spinner before printing to clear the terminal line.
-		spin.Stop()
+		// Stop spinner before printing.
+		spin.Finish()
 
-		return output.PrintJSON(fetchResult{
+		result := fetchResult{
 			Status:   "ok",
 			FileID:   fileID,
 			Name:     metadata.Name,
 			Type:     typeLabel,
 			SavedTo:  outputPath,
 			CachedTo: cachedTo,
-		})
+		}
+		return clioutput.Print(format, result, result)
 	},
 }
 
@@ -251,35 +237,30 @@ func resolveOutputPath(flagValue, docTitle, extension string) string {
 	return flagValue
 }
 
-// writeCacheEntry writes a markdown cache entry and returns the cached file path.
-// Returns "" if caching fails (failures are logged but non-fatal).
-func writeCacheEntry(entry cache.CacheEntry) string {
-	cacheDir := config.CacheDir()
-	cachedPath, err := cache.Store(cacheDir, entry)
-	if err != nil {
-		config.DebugLog("Warning: failed to write cache: %v", err)
+// writeDerivedFile writes a markdown file to the derived directory with
+// cli-kit frontmatter. Returns the path of the written file, or "" on failure.
+func writeDerivedFile(cmd *cobra.Command, slug, typeLabel, sourceURL, body string) string {
+	derivedDir := derived.Resolve(cmd, "gdrive-cli")
+	if err := derived.EnsureDir(derivedDir); err != nil {
+		config.DebugLog("Warning: failed to create derived directory: %v", err)
 		return ""
 	}
-	config.DebugLog("Cached to: %s", cachedPath)
-	return cachedPath
-}
 
-// printMarkdownOutput prints frontmatter + markdown content to stdout.
-func printMarkdownOutput(entry cache.CacheEntry) {
-	fm, err := yaml.Marshal(entry)
-	if err != nil {
-		// Best-effort: skip frontmatter if marshaling fails.
-		config.DebugLog("Warning: failed to marshal frontmatter: %v", err)
-	} else {
-		fmt.Fprint(os.Stdout, "---\n")
-		os.Stdout.Write(fm)
-		fmt.Fprint(os.Stdout, "---\n")
+	fm := derived.NewFrontmatter("gdrive-cli", typeLabel, slug, sourceURL, "fetch")
+	content := derived.FormatFile(fm, body)
+
+	filePath := filepath.Join(derivedDir, slug+".md")
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+		config.DebugLog("Warning: failed to write derived file: %v", err)
+		return ""
 	}
-	fmt.Fprint(os.Stdout, entry.Body)
+	config.DebugLog("Cached to: %s", filePath)
+	return filePath
 }
 
 func init() {
-	fetchCmd.Flags().StringVarP(&fetchExportFormat, "output", "o", "", "Export format: docx, md, csv, pptx (depends on document type)")
+	fetchCmd.Flags().StringVarP(&fetchExportFormat, "export", "e", "", "Export format: docx, md, csv, pptx (depends on document type)")
 	fetchCmd.Flags().StringVarP(&fetchDest, "dest", "f", "", "Output path (file or directory; auto-generates filename if directory)")
+	derived.RegisterFlag(rootCmd, "gdrive-cli")
 	rootCmd.AddCommand(fetchCmd)
 }

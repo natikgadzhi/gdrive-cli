@@ -26,7 +26,7 @@ func TestFetchCommandFlags(t *testing.T) {
 		shorthand string
 		defValue  string
 	}{
-		"output": {shorthand: "o", defValue: ""},
+		"export": {shorthand: "e", defValue: ""},
 		"dest":   {shorthand: "f", defValue: ""},
 	}
 
@@ -49,6 +49,15 @@ func TestFetchCommandDirFlagRemoved(t *testing.T) {
 	f := fetchCmd.Flags().Lookup("dir")
 	if f != nil {
 		t.Error("expected --dir flag to be removed from fetchCmd, but it is still registered")
+	}
+}
+
+func TestFetchCommandOutputFlagNotLocal(t *testing.T) {
+	// The fetch command should NOT have a local --output flag (it uses --export instead).
+	// The global -o/--output is from cli-kit for output format.
+	f := fetchCmd.Flags().Lookup("output")
+	if f != nil {
+		t.Error("expected --output flag to NOT be registered locally on fetchCmd (use --export instead)")
 	}
 }
 
@@ -194,7 +203,7 @@ func TestResolveExportFormat_SlidesInvalidCsv(t *testing.T) {
 // --- Integration-style tests for markdown export ---
 
 func TestFetchResolveExportFormat_DocAsMarkdown(t *testing.T) {
-	// Verify that when fetching a doc with --output md, the resolved format
+	// Verify that when fetching a doc with --export md, the resolved format
 	// produces an .md extension and uses HTML export MIME for conversion.
 	info, err := formatting.ResolveExportFormat(formatting.MIMEGoogleDoc, "md")
 	if err != nil {
