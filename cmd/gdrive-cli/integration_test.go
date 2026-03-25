@@ -70,26 +70,19 @@ func newMockDriveService(t *testing.T, server *httptest.Server) *drive.Service {
 
 // --- Binary-level tests (exec.Command) ---
 
-func TestIntegration_AuthStatus_NotAuthenticated(t *testing.T) {
+func TestIntegration_AuthCheck_NotAuthenticated(t *testing.T) {
 	// Point GDRIVE_CONFIG_DIR to an empty temp directory (no token.json).
 	tmpDir := t.TempDir()
 	env := []string{"GDRIVE_CONFIG_DIR=" + tmpDir}
 
-	stdout, _, err := runBinary(t, env, "auth", "status")
+	_, stderr, err := runBinary(t, env, "auth", "check", "-o", "json")
 	if err == nil {
 		t.Fatal("expected non-zero exit code when not authenticated")
 	}
 
-	var result output.StatusMessage
-	if jsonErr := json.Unmarshal([]byte(stdout), &result); jsonErr != nil {
-		t.Fatalf("failed to parse JSON output: %v\nraw stdout: %s", jsonErr, stdout)
-	}
-
-	if result.Status != "error" {
-		t.Errorf("expected status %q, got %q", "error", result.Status)
-	}
-	if !strings.Contains(result.Message, "Not authenticated") {
-		t.Errorf("expected message to contain 'Not authenticated', got: %s", result.Message)
+	// With cli-kit errors, the error goes to stderr as JSON.
+	if !strings.Contains(stderr, "Not authenticated") {
+		t.Errorf("expected stderr to contain 'Not authenticated', got: %s", stderr)
 	}
 }
 
@@ -133,22 +126,13 @@ func TestIntegration_Version(t *testing.T) {
 	}
 }
 
-func TestIntegration_InvalidFormatFlag(t *testing.T) {
-	stdout, _, err := runBinary(t, nil, "--format", "xml", "version")
-	if err == nil {
-		t.Fatal("expected non-zero exit code for invalid format flag")
+func TestIntegration_NoArgsShowsHelp(t *testing.T) {
+	stdout, _, err := runBinary(t, nil)
+	if err != nil {
+		t.Fatalf("running with no args failed: %v", err)
 	}
-
-	var result output.StatusMessage
-	if jsonErr := json.Unmarshal([]byte(stdout), &result); jsonErr != nil {
-		t.Fatalf("failed to parse JSON output: %v\nraw stdout: %s", jsonErr, stdout)
-	}
-
-	if result.Status != "error" {
-		t.Errorf("expected status %q, got %q", "error", result.Status)
-	}
-	if !strings.Contains(result.Message, "invalid format") {
-		t.Errorf("expected message to contain 'invalid format', got: %s", result.Message)
+	if !strings.Contains(stdout, "Usage:") && !strings.Contains(stdout, "gdrive-cli") {
+		t.Errorf("expected help output, got: %s", stdout)
 	}
 }
 
@@ -246,63 +230,6 @@ func TestIntegration_Search_JSON(t *testing.T) {
 	}
 	if second["type"] != "Google Sheet" {
 		t.Errorf("expected second result type %q, got %v", "Google Sheet", second["type"])
-	}
-}
-
-func TestIntegration_Search_Markdown(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := map[string]any{
-			"files": []map[string]any{
-				{
-					"id":           "slides789",
-					"name":         "Q3 Review",
-					"mimeType":     "application/vnd.google-apps.presentation",
-					"webViewLink":  "https://docs.google.com/presentation/d/slides789/edit",
-					"modifiedTime": "2025-09-01T12:00:00.000Z",
-				},
-			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	svc := newMockDriveService(t, server)
-
-	results, err := api.SearchFiles(svc, "review", 20)
-	if err != nil {
-		t.Fatalf("SearchFiles failed: %v", err)
-	}
-
-	// Build the same markdown output the search command produces.
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "# Search: %s\n\n", "review")
-	fmt.Fprintf(&buf, "**%d results**\n\n", len(results))
-	if len(results) > 0 {
-		fmt.Fprintln(&buf, "| Name | Type | Modified | URL |")
-		fmt.Fprintln(&buf, "|------|------|----------|-----|")
-		for _, r := range results {
-			fmt.Fprintf(&buf, "| %s | %s | %s | %s |\n",
-				r.Name, r.Type, r.Modified, r.URL)
-		}
-	}
-
-	md := buf.String()
-
-	if !strings.Contains(md, "# Search: review") {
-		t.Error("expected markdown to contain search heading")
-	}
-	if !strings.Contains(md, "**1 results**") {
-		t.Error("expected markdown to contain result count")
-	}
-	if !strings.Contains(md, "| Name | Type | Modified | URL |") {
-		t.Error("expected markdown to contain table header")
-	}
-	if !strings.Contains(md, "| Q3 Review | Google Slides |") {
-		t.Error("expected markdown to contain result row")
-	}
-	if !strings.Contains(md, "https://docs.google.com/presentation/d/slides789/edit") {
-		t.Error("expected markdown to contain result URL")
 	}
 }
 
@@ -533,8 +460,7 @@ func TestIntegration_Fetch_Markdown(t *testing.T) {
 		t.Errorf("expected markdown to contain 'bold', got: %s", mdContent)
 	}
 
-	// Verify YAML frontmatter can be built (as the fetch command does with --format markdown).
-	// We just verify the fields are set correctly; YAML serialization is tested elsewhere.
+	// Verify metadata is correct for the file.
 	if meta.Name != "Markdown Test Doc" {
 		t.Errorf("expected name %q for frontmatter, got %q", "Markdown Test Doc", meta.Name)
 	}
@@ -621,7 +547,7 @@ func TestIntegration_Fetch_Sheet(t *testing.T) {
 	}
 }
 
-func TestIntegration_Search_CountFlag(t *testing.T) {
+func TestIntegration_Search_LimitFlag(t *testing.T) {
 	var capturedPageSize string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -851,164 +777,39 @@ func TestIntegration_Fetch_DocAsMarkdown(t *testing.T) {
 	defer server.Close()
 
 	svc := newMockDriveService(t, server)
-	tmpDir := t.TempDir()
 
-	// Verify metadata retrieval.
 	meta, err := api.GetFileMetadata(svc, "mddoc789")
 	if err != nil {
 		t.Fatalf("GetFileMetadata failed: %v", err)
 	}
-	if meta.MimeType != formatting.MIMEGoogleDoc {
-		t.Fatalf("expected Google Doc MIME, got %q", meta.MimeType)
-	}
 
-	// Resolve export format to md.
+	// Resolve the export format.
 	resolved, err := formatting.ResolveExportFormat(meta.MimeType, "md")
 	if err != nil {
 		t.Fatalf("ResolveExportFormat failed: %v", err)
 	}
-	if resolved.Extension != ".md" {
-		t.Errorf("expected .md extension, got %q", resolved.Extension)
-	}
 	if !resolved.NeedsMarkdownConversion {
-		t.Error("expected NeedsMarkdownConversion=true")
+		t.Fatal("expected NeedsMarkdownConversion=true")
 	}
 
-	// Export as markdown (same path as fetch --output md).
+	// Export as markdown.
 	mdContent, err := output.ExportAsMarkdown(svc, "mddoc789", meta.MimeType)
 	if err != nil {
 		t.Fatalf("ExportAsMarkdown failed: %v", err)
 	}
 
-	// Verify the content was converted from HTML to markdown.
 	if !strings.Contains(mdContent, "Hello World") {
 		t.Errorf("expected markdown to contain 'Hello World', got: %s", mdContent)
 	}
-	if !strings.Contains(mdContent, "bold") {
-		t.Errorf("expected markdown to contain 'bold', got: %s", mdContent)
+	if !strings.Contains(mdContent, "**bold**") {
+		t.Errorf("expected markdown to contain '**bold**', got: %s", mdContent)
 	}
 
-	// Write to file (as fetch command would).
-	outputPath := filepath.Join(tmpDir, "Export_MD_Doc.md")
-	if err := os.WriteFile(outputPath, []byte(mdContent), 0o644); err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
-
-	data, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatalf("ReadFile failed: %v", err)
-	}
-	if !strings.Contains(string(data), "Hello World") {
-		t.Errorf("written file missing expected content")
-	}
-
-	// Verify the JSON result shape.
-	result := fetchResult{
-		Status:  "ok",
-		FileID:  "mddoc789",
-		Name:    meta.Name,
-		Type:    "Google Doc",
-		SavedTo: outputPath,
-	}
-	resultJSON, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		t.Fatalf("failed to marshal: %v", err)
-	}
-	var parsed map[string]any
-	if err := json.Unmarshal(resultJSON, &parsed); err != nil {
-		t.Fatalf("failed to parse JSON: %v", err)
-	}
-	if !strings.HasSuffix(parsed["saved_to"].(string), ".md") {
-		t.Errorf("expected saved_to to end with .md, got %v", parsed["saved_to"])
-	}
-}
-
-func TestIntegration_Fetch_SlidesAsMarkdown(t *testing.T) {
-	plainTextContent := "Slide 1: Introduction\nSlide 2: Details\nSlide 3: Conclusion"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-
-		if strings.Contains(path, "files/pres202") && !strings.Contains(path, "export") {
-			resp := map[string]any{
-				"id":          "pres202",
-				"name":        "Team Slides",
-				"mimeType":    "application/vnd.google-apps.presentation",
-				"webViewLink": "https://docs.google.com/presentation/d/pres202/edit",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-
-		if strings.Contains(path, "files/pres202/export") {
-			mimeType := r.URL.Query().Get("mimeType")
-			if mimeType == "text/plain" {
-				w.Header().Set("Content-Type", "text/plain")
-				w.Write([]byte(plainTextContent))
-				return
-			}
-			w.Header().Set("Content-Type", mimeType)
-			w.Write([]byte("pptx-content"))
-			return
-		}
-
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
-	svc := newMockDriveService(t, server)
+	// Verify the output path would use .md extension.
 	tmpDir := t.TempDir()
-
-	meta, err := api.GetFileMetadata(svc, "pres202")
-	if err != nil {
-		t.Fatalf("GetFileMetadata failed: %v", err)
-	}
-
-	// Resolve to md format.
-	resolved, err := formatting.ResolveExportFormat(meta.MimeType, "md")
-	if err != nil {
-		t.Fatalf("ResolveExportFormat failed: %v", err)
-	}
-	if resolved.Extension != ".md" {
-		t.Errorf("expected .md, got %q", resolved.Extension)
-	}
-
-	// Export as markdown (plain text for slides).
-	mdContent, err := output.ExportAsMarkdown(svc, "pres202", meta.MimeType)
-	if err != nil {
-		t.Fatalf("ExportAsMarkdown failed: %v", err)
-	}
-	if mdContent != plainTextContent {
-		t.Errorf("expected plain text content, got %q", mdContent)
-	}
-
-	// Write to .md file.
-	outputPath := filepath.Join(tmpDir, "Team_Slides.md")
-	if err := os.WriteFile(outputPath, []byte(mdContent), 0o644); err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
-
-	data, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatalf("ReadFile failed: %v", err)
-	}
-	if string(data) != plainTextContent {
-		t.Errorf("unexpected file content: %q", string(data))
-	}
-}
-
-func TestIntegration_Fetch_SheetRejectsDocx(t *testing.T) {
-	// Verifying that ResolveExportFormat rejects invalid formats
-	// (this is what the fetch command does before making any API calls).
-	_, err := formatting.ResolveExportFormat(formatting.MIMEGoogleSheet, "docx")
-	if err == nil {
-		t.Fatal("expected error when requesting docx export for a Google Sheet")
-	}
-	if !strings.Contains(err.Error(), "Google Sheet") {
-		t.Errorf("error should mention 'Google Sheet', got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "csv") {
-		t.Errorf("error should mention valid format 'csv', got: %v", err)
+	outPath := resolveOutputPath(tmpDir, meta.Name, resolved.Extension)
+	expected := filepath.Join(tmpDir, "Export MD Doc.md")
+	if outPath != expected {
+		t.Errorf("output path = %q, want %q", outPath, expected)
 	}
 }

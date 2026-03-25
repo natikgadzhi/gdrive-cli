@@ -44,16 +44,16 @@ func TestSearchCommandRequiresExactlyOneArg(t *testing.T) {
 	}
 }
 
-func TestSearchCommandCountFlag(t *testing.T) {
-	flag := searchCmd.Flags().Lookup("count")
+func TestSearchCommandLimitFlag(t *testing.T) {
+	flag := searchCmd.Flags().Lookup("limit")
 	if flag == nil {
-		t.Fatal("expected 'count' flag to be registered on search command")
+		t.Fatal("expected 'limit' flag to be registered on search command")
 	}
 	if flag.DefValue != "20" {
-		t.Errorf("expected default count to be 20, got %s", flag.DefValue)
+		t.Errorf("expected default limit to be 20, got %s", flag.DefValue)
 	}
 	if flag.Shorthand != "n" {
-		t.Errorf("expected count shorthand to be 'n', got %s", flag.Shorthand)
+		t.Errorf("expected limit shorthand to be 'n', got %s", flag.Shorthand)
 	}
 }
 

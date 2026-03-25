@@ -53,29 +53,6 @@ func TestTokenFile(t *testing.T) {
 	}
 }
 
-func TestCacheDirDefault(t *testing.T) {
-	t.Setenv("GDRIVE_CACHE_DIR", "")
-
-	dir := CacheDir()
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("UserHomeDir failed: %v", err)
-	}
-	expected := filepath.Join(home, ".local", "share", "gdrive-cli", "cache")
-	if dir != expected {
-		t.Errorf("CacheDir() = %q, want %q", dir, expected)
-	}
-}
-
-func TestCacheDirEnvOverride(t *testing.T) {
-	t.Setenv("GDRIVE_CACHE_DIR", "/tmp/custom-cache")
-
-	dir := CacheDir()
-	if dir != "/tmp/custom-cache" {
-		t.Errorf("CacheDir() = %q, want %q", dir, "/tmp/custom-cache")
-	}
-}
-
 func TestCredentialsFileDefaultSuffix(t *testing.T) {
 	t.Setenv("GDRIVE_CONFIG_DIR", "")
 

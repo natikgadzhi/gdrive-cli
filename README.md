@@ -1,6 +1,6 @@
 # gdrive-cli
 
-A command-line tool to search and download Google Docs, Sheets, and Slides via the Google Drive API. All output is JSON (default) or Markdown to stdout; debug logs go to stderr.
+A command-line tool to search and download Google Docs, Sheets, and Slides via the Google Drive API. Output is JSON or table (auto-detected based on TTY); debug logs go to stderr.
 
 ## Setup
 
@@ -53,13 +53,15 @@ Opens a browser for Google OAuth consent. On success, saves a token to `~/.confi
 ## Global flags
 
 ```
-gdrive-cli [--debug] [--format json|markdown] <command>
+gdrive-cli [--debug] [-o json|table] [--no-cache] <command>
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--debug` | Print verbose debug logs to stderr |
-| `--format` | Output format: `json` (default) or `markdown` |
+| `-o` / `--output` | Output format: `json` or `table` (default: auto-detected; table in TTY, json when piped) |
+| `--no-cache` | Skip writing to the derived data directory |
+| `-d` / `--derived` | Derived data directory (default: `~/.local/share/lambdal/derived/gdrive-cli`) |
 
 ---
 
@@ -73,7 +75,7 @@ gdrive-cli auth login
 
 Runs the OAuth2 installed-app flow. Opens a browser for Google consent and saves credentials locally.
 
-**Output:**
+**JSON output:**
 ```json
 { "status": "ok", "message": "Successfully authenticated with Google Drive." }
 ```
@@ -84,30 +86,28 @@ Runs the OAuth2 installed-app flow. Opens a browser for Google consent and saves
 
 ---
 
-### `auth status`
+### `auth check`
 
 ```sh
-gdrive-cli auth status
+gdrive-cli auth check
 ```
 
 Checks whether stored credentials exist and are valid (or refreshable).
 
-**Output (authenticated):**
+**JSON output (authenticated):**
 ```json
 { "status": "ok", "message": "Authenticated and credentials are valid." }
 ```
 
-**Output (not authenticated):**
-```json
-{ "status": "error", "message": "Not authenticated. Run `gdrive-cli auth login` first." }
-```
+**Error (not authenticated):**
+Prints an error to stderr indicating credentials are missing or invalid.
 
 ---
 
 ### `search`
 
 ```sh
-gdrive-cli search <query> [--count N] [--format json|markdown]
+gdrive-cli search <query> [--limit N] [-o json|table]
 ```
 
 Searches Google Drive for Docs, Sheets, and Slides matching `query`. Matches on both file name and full text content. Results are ordered by `modifiedTime desc`.
@@ -115,8 +115,8 @@ Searches Google Drive for Docs, Sheets, and Slides matching `query`. Matches on 
 | Argument / Option | Default | Description |
 |---|---|---|
 | `query` | required | Search string |
-| `--count` / `-n` | `20` | Max results to return |
-| `--format` | `json` | Output format: `json` or `markdown` |
+| `--limit` / `-n` | `20` | Max results to return |
+| `-o` / `--output` | auto | Output format: `json` or `table` |
 
 **JSON output:**
 ```json
@@ -134,21 +134,21 @@ Searches Google Drive for Docs, Sheets, and Slides matching `query`. Matches on 
 }
 ```
 
-**Markdown output** (`--format markdown`):
+**Table output** (default in TTY):
 
-Prints a heading with the query, result count, and a Markdown table of results.
+Prints an aligned table with columns: NAME, TYPE, MODIFIED, URL.
 
 **Notes:**
 - Only returns Docs, Sheets, and Slides -- no other Drive files.
 - Single quotes in `query` are escaped for the Drive API query syntax.
-- `--count` maps to `pageSize` in the Drive API; the API may return fewer results than requested.
+- `--limit` maps to `pageSize` in the Drive API; the API may return fewer results than requested.
 
 ---
 
 ### `fetch`
 
 ```sh
-gdrive-cli fetch <url> [--output FORMAT] [--dest PATH] [--format json|markdown]
+gdrive-cli fetch <url> [--export FORMAT] [--dest PATH] [-o json|table]
 ```
 
 Downloads a Google Doc, Sheet, or Slides file and saves it locally.
@@ -156,9 +156,9 @@ Downloads a Google Doc, Sheet, or Slides file and saves it locally.
 | Argument / Option | Default | Description |
 |---|---|---|
 | `url` | required | Full Google Docs/Sheets/Slides URL |
-| `--output` / `-o` | type default | Export format: `docx`, `md`, `csv`, `pptx` (depends on document type) |
+| `--export` / `-e` | type default | Export format: `docx`, `md`, `csv`, `pptx` (depends on document type) |
 | `--dest` / `-f` | auto-generated | Output file path (or directory; auto-generates filename if directory) |
-| `--format` | `json` | Output format: `json` or `markdown` |
+| `-o` / `--output` | auto | Output format: `json` or `table` |
 
 **Default export formats:**
 
@@ -187,13 +187,9 @@ URL-encoded characters are decoded before ID extraction.
   "name": "Q1 Budget",
   "type": "Google Sheet",
   "saved_to": "./Q1_Budget.csv",
-  "cached_to": "~/.local/share/gdrive-cli/cache/q1-budget-1aBcDe.md"
+  "cached_to": "~/.local/share/lambdal/derived/gdrive-cli/q1-budget-1aBcDe.md"
 }
 ```
-
-**Markdown output** (`--format markdown`):
-
-Prints the document content as Markdown with YAML frontmatter containing file metadata. The file is also saved locally in its native format (docx/csv/pptx).
 
 **Errors:**
 - Unrecognized URL format -- lists supported formats
@@ -208,12 +204,14 @@ Prints the document content as Markdown with YAML frontmatter containing file me
 gdrive-cli version
 ```
 
-Prints version, commit, and build date information.
+Prints version, commit, and build date information as JSON.
 
 **Output:**
 ```json
 { "version": "0.1.0", "commit": "abc1234", "date": "2025-01-01T00:00:00Z" }
 ```
+
+Also available as `gdrive-cli --version`.
 
 ---
 
@@ -224,5 +222,6 @@ Prints version, commit, and build date information.
 | `~/.config/gdrive-cli/credentials.json` | OAuth client credentials (you provide) |
 | `~/.config/gdrive-cli/token.json` | OAuth token (written after login) |
 | `$GDRIVE_CONFIG_DIR` | Override for the config directory |
-| `~/.local/share/gdrive-cli/cache/` | Cached Markdown exports of fetched documents |
-| `$GDRIVE_CACHE_DIR` | Override for the cache directory |
+| `~/.local/share/lambdal/derived/gdrive-cli/` | Derived Markdown exports of fetched documents |
+| `$GDRIVE_CLI_DERIVED_DIR` | Override for the derived directory |
+| `$LAMBDAL_DERIVED_DIR` | Override for the base derived directory (tool name appended) |

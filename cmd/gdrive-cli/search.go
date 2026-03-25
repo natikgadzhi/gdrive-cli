@@ -2,17 +2,17 @@ package main
 
 import (
 	"fmt"
-	"os"
 
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
+	clioutput "github.com/natikgadzhi/cli-kit/output"
+	cliprogress "github.com/natikgadzhi/cli-kit/progress"
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
-	"github.com/natikgadzhi/gdrive-cli/internal/output"
-	"github.com/natikgadzhi/gdrive-cli/internal/progress"
 	"github.com/spf13/cobra"
 )
 
-var searchCount int
+var searchLimit int
 
 // searchResponse is the JSON envelope for search results.
 type searchResponse struct {
@@ -21,71 +21,71 @@ type searchResponse struct {
 	Results []api.FileResult `json:"results"`
 }
 
+// RenderTable implements cli-kit TableRenderer.
+func (s searchResponse) RenderTable(t *clioutput.Table) {
+	t.Header("Name", "Type", "Modified", "URL")
+	for _, r := range s.Results {
+		t.Row(r.Name, r.Type, r.Modified, r.URL)
+	}
+}
+
 var searchCmd = &cobra.Command{
 	Use:   "search <query>",
 	Short: "Search Google Drive for documents",
 	Long:  "Searches Google Drive for Docs, Sheets, and Slides matching the query. Matches on both file name and full text content.",
+	Example: `  gdrive-cli search "budget 2025"
+  gdrive-cli search "project proposal" -n 5
+  gdrive-cli search "Q1 report" -o json`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("requires a search query\n\nUsage: gdrive-cli search <query> [--count N]\n\nExample: gdrive-cli search \"budget 2025\"")
+			return fmt.Errorf("requires a search query\n\nUsage: gdrive-cli search <query> [--limit N]\n\nExample: gdrive-cli search \"budget 2025\"")
 		}
 		return cobra.ExactArgs(1)(cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		query := args[0]
+		format := clioutput.Resolve(cmd)
+
 		if query == "" {
-			return output.Errorf("search query must not be empty")
+			return cliError(clierrors.ExitError, "search query must not be empty", cmd)
 		}
 
-		config.DebugLog("Searching for %q with count=%d", query, searchCount)
+		config.DebugLog("Searching for %q with limit=%d", query, searchLimit)
 
 		// Authenticate.
 		token, oauthConfig, err := auth.GetCredentials(config.ConfigDir())
 		if err != nil {
-			return output.Errorf("Authentication failed: %s", err)
+			return cliError(clierrors.ExitAuthError, "Authentication failed: %s", cmd, err)
 		}
 
 		// Create Drive service.
 		svc, err := api.NewDriveService(token, oauthConfig)
 		if err != nil {
-			return output.Errorf("Failed to create Drive service: %s", err)
+			return cliError(clierrors.ExitError, "Failed to create Drive service: %s", cmd, err)
 		}
 
 		// Show spinner while searching.
-		spinner := progress.NewSpinner("Searching Google Drive...")
-		spinner.Start()
-		defer spinner.Stop()
+		spinner := cliprogress.NewSpinner("Searching Google Drive...", format)
+		spinner.Update(0)
+		defer spinner.Finish()
 
-		results, err := api.SearchFiles(svc, query, searchCount)
+		results, err := api.SearchFiles(svc, query, searchLimit)
 		if err != nil {
-			return output.Errorf("Search failed: %s", err)
+			return cliError(clierrors.ExitError, "Search failed: %s", cmd, err)
 		}
 
-		// Markdown table output.
-		if outputFormat == output.FormatMarkdown {
-			spinner.Stop()
-			fmt.Fprintf(os.Stdout, "# Search: %s\n\n", query)
-			fmt.Fprintf(os.Stdout, "**%d results**\n\n", len(results))
-			if len(results) > 0 {
-				fmt.Fprintln(os.Stdout, "| Name | Type | Modified | URL |")
-				fmt.Fprintln(os.Stdout, "|------|------|----------|-----|")
-				for _, r := range results {
-					fmt.Fprintf(os.Stdout, "| %s | %s | %s | %s |\n",
-						r.Name, r.Type, r.Modified, r.URL)
-				}
-			}
-			return nil
-		}
+		spinner.Finish()
 
-		return output.PrintJSON(searchResponse{
+		resp := searchResponse{
 			Query:   query,
 			Count:   len(results),
 			Results: results,
-		})
+		}
+		return clioutput.Print(format, resp, resp)
 	},
 }
 
 func init() {
-	searchCmd.Flags().IntVarP(&searchCount, "count", "n", 20, "Maximum number of results to return")
+	searchCmd.Flags().IntVarP(&searchLimit, "limit", "n", 20, "Maximum number of results to return")
 	rootCmd.AddCommand(searchCmd)
 }
