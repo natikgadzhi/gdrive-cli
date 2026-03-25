@@ -165,7 +165,8 @@ func TestExportAsMarkdown_GoogleDoc(t *testing.T) {
 }
 
 func TestExportAsMarkdown_GoogleSlides(t *testing.T) {
-	plainText := "Slide 1: Introduction\n\nSlide 2: Details\n"
+	// Drive API text/plain export separates slides with double newlines.
+	plainText := "Introduction\nWelcome to the talk\n\n\nDetails\nSome important info\n"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify the correct export MIME type is requested.
@@ -184,8 +185,18 @@ func TestExportAsMarkdown_GoogleSlides(t *testing.T) {
 		t.Fatalf("ExportAsMarkdown returned error: %v", err)
 	}
 
-	if result != plainText {
-		t.Errorf("expected plain text pass-through, got:\n%q\nwant:\n%q", result, plainText)
+	// The result should now be structured Markdown with slide markers.
+	if !strings.Contains(result, "## Slide 1") {
+		t.Errorf("expected '## Slide 1' in result, got:\n%s", result)
+	}
+	if !strings.Contains(result, "## Slide 2") {
+		t.Errorf("expected '## Slide 2' in result, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Introduction") {
+		t.Errorf("expected 'Introduction' in result, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Details") {
+		t.Errorf("expected 'Details' in result, got:\n%s", result)
 	}
 }
 
@@ -246,5 +257,97 @@ func TestExportAsMarkdown_DriveAPIError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "drive export failed") {
 		t.Errorf("expected 'drive export failed' in error, got: %v", err)
+	}
+}
+
+// --- PlainTextToSlideMarkdown tests ---
+
+func TestPlainTextToSlideMarkdown_MultipleSlides(t *testing.T) {
+	// Simulate the Drive API text/plain export: slides separated by double newlines.
+	input := "Title Slide\nPresentation by Author\n\n\nAgenda\nItem 1\nItem 2\n\n\nConclusion\nThank you\n"
+
+	result := PlainTextToSlideMarkdown(input)
+
+	if !strings.Contains(result, "## Slide 1") {
+		t.Errorf("expected '## Slide 1', got:\n%s", result)
+	}
+	if !strings.Contains(result, "## Slide 2") {
+		t.Errorf("expected '## Slide 2', got:\n%s", result)
+	}
+	if !strings.Contains(result, "## Slide 3") {
+		t.Errorf("expected '## Slide 3', got:\n%s", result)
+	}
+	if !strings.Contains(result, "Title Slide") {
+		t.Errorf("expected 'Title Slide' content, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Agenda") {
+		t.Errorf("expected 'Agenda' content, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Conclusion") {
+		t.Errorf("expected 'Conclusion' content, got:\n%s", result)
+	}
+}
+
+func TestPlainTextToSlideMarkdown_SingleSlide(t *testing.T) {
+	input := "Only one slide\nWith some text\n"
+
+	result := PlainTextToSlideMarkdown(input)
+
+	if !strings.Contains(result, "## Slide 1") {
+		t.Errorf("expected '## Slide 1', got:\n%s", result)
+	}
+	if strings.Contains(result, "## Slide 2") {
+		t.Errorf("should not contain '## Slide 2', got:\n%s", result)
+	}
+	if !strings.Contains(result, "Only one slide") {
+		t.Errorf("expected slide content, got:\n%s", result)
+	}
+}
+
+func TestPlainTextToSlideMarkdown_Empty(t *testing.T) {
+	result := PlainTextToSlideMarkdown("")
+	if result != "" {
+		t.Errorf("expected empty string for empty input, got: %q", result)
+	}
+}
+
+func TestPlainTextToSlideMarkdown_WhitespaceOnly(t *testing.T) {
+	result := PlainTextToSlideMarkdown("   \n\n\n   \n")
+	if result != "" {
+		t.Errorf("expected empty string for whitespace-only input, got: %q", result)
+	}
+}
+
+func TestPlainTextToSlideMarkdown_PreservesParagraphBreaks(t *testing.T) {
+	// A single blank line within a slide should be preserved as a paragraph break,
+	// while double blank lines mark slide boundaries.
+	input := "First paragraph\n\nSecond paragraph\n\n\nNext slide content\n"
+
+	result := PlainTextToSlideMarkdown(input)
+
+	if !strings.Contains(result, "## Slide 1") {
+		t.Errorf("expected '## Slide 1', got:\n%s", result)
+	}
+	if !strings.Contains(result, "## Slide 2") {
+		t.Errorf("expected '## Slide 2', got:\n%s", result)
+	}
+	if !strings.Contains(result, "First paragraph") {
+		t.Errorf("expected first paragraph, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Second paragraph") {
+		t.Errorf("expected second paragraph, got:\n%s", result)
+	}
+}
+
+func TestPlainTextToSlideMarkdown_WindowsLineEndings(t *testing.T) {
+	input := "Slide one\r\n\r\n\r\nSlide two\r\n"
+
+	result := PlainTextToSlideMarkdown(input)
+
+	if !strings.Contains(result, "## Slide 1") {
+		t.Errorf("expected '## Slide 1', got:\n%s", result)
+	}
+	if !strings.Contains(result, "## Slide 2") {
+		t.Errorf("expected '## Slide 2', got:\n%s", result)
 	}
 }

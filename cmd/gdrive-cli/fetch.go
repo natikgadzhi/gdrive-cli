@@ -51,11 +51,12 @@ the default native format is used.
 Export formats per document type:
   Google Doc    : docx (default), md
   Google Sheet  : csv  (default)
-  Google Slides : pptx (default), md
+  Google Slides : pptx (default), md, pdf
 
 When --export md (or -e md) is used:
   - Google Docs are exported as HTML and converted to Markdown (.md)
-  - Google Slides are exported as plain text and saved as .md
+  - Google Slides are exported as plain text and converted to structured
+    Markdown with slide boundary markers (.md)
 
 Use --dest / -f to control where the file is saved:
   - If omitted, the file is saved in the current directory with an

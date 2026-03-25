@@ -86,6 +86,10 @@ var mimeRegistry = map[string]mimeInfo{
 				ExportMIME: "text/plain",
 				Extension:  ".md",
 			},
+			"pdf": {
+				ExportMIME: "application/pdf",
+				Extension:  ".pdf",
+			},
 		},
 	},
 }

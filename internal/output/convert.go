@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
@@ -20,10 +21,89 @@ func HTMLToMarkdown(htmlContent []byte) (string, error) {
 	return md, nil
 }
 
+// PlainTextToSlideMarkdown converts plain text exported from the Google Drive
+// API (text/plain for Slides) into structured Markdown with slide boundary
+// markers. The Drive API separates slides with blank lines in the text/plain
+// export. This function detects those boundaries and wraps each slide's content
+// in a Markdown heading (## Slide N).
+//
+// If the input is empty or contains only whitespace, an empty string is returned.
+func PlainTextToSlideMarkdown(plainText string) string {
+	trimmed := strings.TrimSpace(plainText)
+	if trimmed == "" {
+		return ""
+	}
+
+	// The Google Drive text/plain export for Slides separates slides with
+	// one or more blank lines. Split on runs of 2+ newlines to find slide
+	// boundaries.
+	rawSlides := splitSlides(trimmed)
+
+	var buf strings.Builder
+	for i, slide := range rawSlides {
+		content := strings.TrimSpace(slide)
+		if content == "" {
+			continue
+		}
+
+		if buf.Len() > 0 {
+			buf.WriteString("\n\n")
+		}
+		fmt.Fprintf(&buf, "## Slide %d\n\n%s\n", i+1, content)
+	}
+
+	return buf.String()
+}
+
+// splitSlides splits plain text into slide chunks. The Drive API text/plain
+// export for Slides uses two or more consecutive newlines as slide boundaries.
+func splitSlides(text string) []string {
+	// Normalise line endings to \n.
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+
+	// Split on two or more consecutive newlines (blank line boundaries).
+	var slides []string
+	var current strings.Builder
+	lines := strings.Split(text, "\n")
+
+	blankRun := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			blankRun++
+			if blankRun == 2 && current.Len() > 0 {
+				slides = append(slides, current.String())
+				current.Reset()
+				blankRun = 0
+			}
+			continue
+		}
+
+		// If we had exactly one blank line, it's a paragraph break within
+		// the same slide — preserve it.
+		if blankRun == 1 && current.Len() > 0 {
+			current.WriteString("\n\n")
+		}
+		blankRun = 0
+
+		if current.Len() > 0 {
+			current.WriteString("\n")
+		}
+		current.WriteString(line)
+	}
+
+	if current.Len() > 0 {
+		slides = append(slides, current.String())
+	}
+
+	return slides
+}
+
 // ExportAsMarkdown exports a Google Workspace file as a text representation.
 //
 // For Google Docs, the file is exported as HTML and then converted to Markdown.
-// For Google Slides, the file is exported as plain text (returned as-is).
+// For Google Slides, the file is exported as plain text and then converted to
+// structured Markdown with slide boundary markers.
 // For Google Sheets, the file is exported as CSV (returned as-is).
 //
 // Returns an error if the MIME type is unsupported or the Drive API call fails.
@@ -44,11 +124,13 @@ func ExportAsMarkdown(svc *drive.Service, fileID string, mimeType string) (strin
 		return "", fmt.Errorf("reading export response: %w", err)
 	}
 
-	// Google Docs are exported as HTML and converted to Markdown.
-	// Sheets (CSV) and Slides (plain text) are returned as-is.
-	if mimeType == formatting.MIMEGoogleDoc {
+	switch mimeType {
+	case formatting.MIMEGoogleDoc:
 		return HTMLToMarkdown(body)
+	case formatting.MIMEGoogleSlides:
+		return PlainTextToSlideMarkdown(string(body)), nil
+	default:
+		// Sheets (CSV) and any future types are returned as-is.
+		return string(body), nil
 	}
-
-	return string(body), nil
 }
