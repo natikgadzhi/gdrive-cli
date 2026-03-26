@@ -66,7 +66,6 @@ var searchCmd = &cobra.Command{
 
 		// Show spinner while searching.
 		spinner := cliprogress.NewSpinner("Searching Google Drive...", format)
-		spinner.Update(0)
 		defer spinner.Finish()
 
 		results, err := api.SearchFiles(svc, query, searchLimit)

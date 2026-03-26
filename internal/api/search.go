@@ -31,6 +31,8 @@ func SearchFiles(svc *drive.Service, query string, maxResults int) ([]FileResult
 
 	call := svc.Files.List().
 		Q(fullQuery).
+		SupportsAllDrives(true).
+		IncludeItemsFromAllDrives(true).
 		PageSize(int64(maxResults)).
 		Fields("files(id,name,mimeType,webViewLink,modifiedTime)").
 		OrderBy("modifiedTime desc")

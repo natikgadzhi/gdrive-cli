@@ -14,6 +14,7 @@ func GetFileMetadata(svc *drive.Service, fileID string) (*FileMetadata, error) {
 	config.DebugLog("Fetching metadata for file %s", fileID)
 
 	file, err := svc.Files.Get(fileID).
+		SupportsAllDrives(true).
 		Fields("id,name,mimeType,webViewLink").
 		Do()
 	if err != nil {

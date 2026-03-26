@@ -36,8 +36,8 @@ type fetchResult struct {
 
 // RenderTable implements cli-kit TableRenderer.
 func (r fetchResult) RenderTable(t *clioutput.Table) {
-	t.Header("Status", "File ID", "Name", "Type", "Saved To", "Cached To")
-	t.Row(r.Status, r.FileID, r.Name, r.Type, r.SavedTo, r.CachedTo)
+	t.Header("STATUS", "NAME", "TYPE", "SAVED TO")
+	t.Row(r.Status, r.Name, r.Type, r.SavedTo)
 }
 
 var fetchCmd = &cobra.Command{
@@ -98,7 +98,6 @@ Use --dest / -f to control where the file is saved:
 
 		// Fetch file metadata.
 		spin := cliprogress.NewSpinner("Fetching file metadata...", format)
-		spin.Update(0)
 		defer spin.Finish()
 
 		metadata, err := api.GetFileMetadata(svc, fileID)
@@ -141,7 +140,7 @@ Use --dest / -f to control where the file is saved:
 		// When exporting as markdown, use the markdown export path which
 		// handles HTML-to-markdown conversion for Docs.
 		if resolved.NeedsMarkdownConversion {
-			spin.Update(0)
+			spin.SetMessage("Exporting as markdown...")
 
 			mdContent, err := output.ExportAsMarkdown(svc, fileID, metadata.MimeType)
 			if err != nil {
@@ -176,14 +175,14 @@ Use --dest / -f to control where the file is saved:
 		}
 
 		// Native export path (docx/csv/pptx).
-		spin.Update(0)
+		spin.SetMessage("Downloading file...")
 
 		if err := api.ExportFile(svc, fileID, exportMIME, outputPath); err != nil {
 			return cliError(clierrors.ExitError, "Failed to export file: %s", cmd, err)
 		}
 
 		// Export as markdown/text for the derived directory.
-		spin.Update(0)
+		spin.SetMessage("Caching derived data...")
 
 		mdContent, err := output.ExportAsMarkdown(svc, fileID, metadata.MimeType)
 		if err != nil {
@@ -196,9 +195,7 @@ Use --dest / -f to control where the file is saved:
 			cachedTo = writeDerivedFile(cmd, slug, typeLabel, rawURL, mdContent)
 		}
 
-		// Stop spinner before printing.
 		spin.Finish()
-
 		result := fetchResult{
 			Status:   "ok",
 			FileID:   fileID,
