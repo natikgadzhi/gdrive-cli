@@ -278,3 +278,108 @@ func TestResolveExportFormat_SlidesPDF(t *testing.T) {
 		t.Error("NeedsMarkdownConversion should be false for PDF export")
 	}
 }
+
+// --- IsNativeGoogleType tests ---
+
+func TestIsNativeGoogleType_True(t *testing.T) {
+	tests := []string{MIMEGoogleDoc, MIMEGoogleSheet, MIMEGoogleSlides}
+	for _, mime := range tests {
+		if !IsNativeGoogleType(mime) {
+			t.Errorf("IsNativeGoogleType(%q) = false, want true", mime)
+		}
+	}
+}
+
+func TestIsNativeGoogleType_False(t *testing.T) {
+	tests := []string{
+		"application/pdf",
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		"text/plain",
+		"application/octet-stream",
+		"",
+	}
+	for _, mime := range tests {
+		if IsNativeGoogleType(mime) {
+			t.Errorf("IsNativeGoogleType(%q) = true, want false", mime)
+		}
+	}
+}
+
+// --- GetBinaryTypeInfo tests ---
+
+func TestGetBinaryTypeInfo_Known(t *testing.T) {
+	tests := []struct {
+		mime      string
+		wantExt   string
+		wantLabel string
+	}{
+		{"application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx", "Word Document"},
+		{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx", "Excel Spreadsheet"},
+		{"application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx", "PowerPoint Presentation"},
+		{"application/pdf", ".pdf", "PDF"},
+		{"application/msword", ".doc", "Word Document (Legacy)"},
+		{"text/plain", ".txt", "Text File"},
+		{"text/csv", ".csv", "CSV File"},
+		{"image/png", ".png", "PNG Image"},
+		{"image/jpeg", ".jpg", "JPEG Image"},
+		{"application/octet-stream", "", "Binary File"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.mime, func(t *testing.T) {
+			ext, label, ok := GetBinaryTypeInfo(tt.mime)
+			if !ok {
+				t.Fatalf("GetBinaryTypeInfo(%q) = false, want true", tt.mime)
+			}
+			if ext != tt.wantExt {
+				t.Errorf("extension = %q, want %q", ext, tt.wantExt)
+			}
+			if label != tt.wantLabel {
+				t.Errorf("label = %q, want %q", label, tt.wantLabel)
+			}
+		})
+	}
+}
+
+func TestGetBinaryTypeInfo_Unknown(t *testing.T) {
+	_, _, ok := GetBinaryTypeInfo("application/x-unknown-format")
+	if ok {
+		t.Error("GetBinaryTypeInfo for unknown type should return false")
+	}
+}
+
+func TestGetBinaryTypeInfo_NativeGoogleType(t *testing.T) {
+	// Native Google types should NOT be in the binary type map.
+	for _, mime := range []string{MIMEGoogleDoc, MIMEGoogleSheet, MIMEGoogleSlides} {
+		_, _, ok := GetBinaryTypeInfo(mime)
+		if ok {
+			t.Errorf("GetBinaryTypeInfo(%q) should return false for native types", mime)
+		}
+	}
+}
+
+// --- ExtensionFromFilename tests ---
+
+func TestExtensionFromFilename(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"document.docx", ".docx"},
+		{"spreadsheet.xlsx", ".xlsx"},
+		{"presentation.pptx", ".pptx"},
+		{"file.tar.gz", ".gz"},
+		{"noextension", ""},
+		{"", ""},
+		{".hidden", ".hidden"},
+		{"path/to/file.txt", ".txt"},
+		{"path\\to\\file.doc", ".doc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtensionFromFilename(tt.name)
+			if got != tt.want {
+				t.Errorf("ExtensionFromFilename(%q) = %q, want %q", tt.name, got, tt.want)
+			}
+		})
+	}
+}

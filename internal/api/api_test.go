@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"testing"
 
 	drive "google.golang.org/api/drive/v3"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -456,6 +459,204 @@ func TestFileMetadata_Fields(t *testing.T) {
 	}
 	if decoded["mimeType"] != "application/vnd.google-apps.spreadsheet" {
 		t.Errorf("expected mimeType for spreadsheet, got '%s'", decoded["mimeType"])
+	}
+}
+
+// --- Error classification tests ---
+
+func TestIsCannotExportFile_StructuredReason(t *testing.T) {
+	err := &googleapi.Error{
+		Code:    403,
+		Message: "Export failed",
+		Errors: []googleapi.ErrorItem{
+			{Reason: "cannotExportFile", Message: "Cannot export file"},
+		},
+	}
+	if !IsCannotExportFile(err) {
+		t.Error("expected IsCannotExportFile to return true for structured reason")
+	}
+}
+
+func TestIsCannotExportFile_MessageFallback(t *testing.T) {
+	err := &googleapi.Error{
+		Code:    403,
+		Message: "cannotExportFile: the file cannot be exported",
+	}
+	if !IsCannotExportFile(err) {
+		t.Error("expected IsCannotExportFile to return true for message fallback")
+	}
+}
+
+func TestIsCannotExportFile_Negative(t *testing.T) {
+	err := &googleapi.Error{
+		Code:    403,
+		Message: "Insufficient Permission",
+		Errors: []googleapi.ErrorItem{
+			{Reason: "insufficientPermissions"},
+		},
+	}
+	if IsCannotExportFile(err) {
+		t.Error("expected IsCannotExportFile to return false for unrelated error")
+	}
+}
+
+func TestIsCannotExportFile_NilError(t *testing.T) {
+	if IsCannotExportFile(nil) {
+		t.Error("expected IsCannotExportFile to return false for nil error")
+	}
+}
+
+func TestIsCannotExportFile_NonGoogleError(t *testing.T) {
+	err := errors.New("some other error")
+	if IsCannotExportFile(err) {
+		t.Error("expected IsCannotExportFile to return false for non-Google error")
+	}
+}
+
+func TestIsCannotExportFile_WrappedError(t *testing.T) {
+	inner := &googleapi.Error{
+		Code: 403,
+		Errors: []googleapi.ErrorItem{
+			{Reason: "cannotExportFile"},
+		},
+	}
+	wrapped := fmt.Errorf("drive export failed: %w", inner)
+	if !IsCannotExportFile(wrapped) {
+		t.Error("expected IsCannotExportFile to return true for wrapped error")
+	}
+}
+
+func TestIsExportSizeLimitExceeded_StructuredReason(t *testing.T) {
+	err := &googleapi.Error{
+		Code:    403,
+		Message: "Export size limit exceeded",
+		Errors: []googleapi.ErrorItem{
+			{Reason: "exportSizeLimitExceeded"},
+		},
+	}
+	if !IsExportSizeLimitExceeded(err) {
+		t.Error("expected IsExportSizeLimitExceeded to return true for structured reason")
+	}
+}
+
+func TestIsExportSizeLimitExceeded_MessageFallback(t *testing.T) {
+	err := &googleapi.Error{
+		Code:    403,
+		Message: "exportSizeLimitExceeded for the document",
+	}
+	if !IsExportSizeLimitExceeded(err) {
+		t.Error("expected IsExportSizeLimitExceeded to return true for message fallback")
+	}
+}
+
+func TestIsExportSizeLimitExceeded_Negative(t *testing.T) {
+	err := &googleapi.Error{
+		Code:    403,
+		Message: "Insufficient Permission",
+	}
+	if IsExportSizeLimitExceeded(err) {
+		t.Error("expected IsExportSizeLimitExceeded to return false for unrelated error")
+	}
+}
+
+func TestIsExportSizeLimitExceeded_WrappedError(t *testing.T) {
+	inner := &googleapi.Error{
+		Code: 403,
+		Errors: []googleapi.ErrorItem{
+			{Reason: "exportSizeLimitExceeded"},
+		},
+	}
+	wrapped := fmt.Errorf("drive export failed: %w", inner)
+	if !IsExportSizeLimitExceeded(wrapped) {
+		t.Error("expected IsExportSizeLimitExceeded to return true for wrapped error")
+	}
+}
+
+// --- DownloadFile tests ---
+
+func TestDownloadFile_Success(t *testing.T) {
+	content := []byte("binary file content here")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify it's a get request for the right file with alt=media.
+		if !strings.Contains(r.URL.Path, "files/abc123") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		// The Drive SDK adds alt=media for Download() calls.
+		if r.URL.Query().Get("alt") != "media" {
+			t.Errorf("expected alt=media, got alt=%s", r.URL.Query().Get("alt"))
+		}
+
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Write(content)
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server)
+
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "subdir", "downloaded.docx")
+
+	err := DownloadFile(svc, "abc123", outputPath)
+	if err != nil {
+		t.Fatalf("DownloadFile failed: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+	if string(data) != string(content) {
+		t.Errorf("expected content %q, got %q", string(content), string(data))
+	}
+}
+
+func TestDownloadFile_CreatesParentDirs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("test content"))
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server)
+
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "a", "b", "c", "file.bin")
+
+	err := DownloadFile(svc, "xyz789", outputPath)
+	if err != nil {
+		t.Fatalf("DownloadFile failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Dir(outputPath)); os.IsNotExist(err) {
+		t.Error("expected parent directories to be created")
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+	if string(data) != "test content" {
+		t.Errorf("expected 'test content', got %q", string(data))
+	}
+}
+
+func TestDownloadFile_APIError(t *testing.T) {
+	server := httptest.NewServer(jsonErrorHandler(http.StatusForbidden, "Download denied"))
+	defer server.Close()
+
+	svc := newTestService(t, server)
+
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "output.bin")
+
+	err := DownloadFile(svc, "forbidden123", outputPath)
+	if err == nil {
+		t.Fatal("expected error for 403 response, got nil")
+	}
+	if !strings.Contains(err.Error(), "drive download failed") {
+		t.Errorf("expected 'drive download failed' in error, got: %v", err)
 	}
 }
 
