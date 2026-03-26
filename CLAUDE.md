@@ -140,6 +140,7 @@ Reviewers are spawned by the lead with the PR number and task ID in their prompt
 
 ## Important Rules
 
+- **Always fetch before checking task status** — run `git fetch` and `git pull --ff` before answering questions about whether a task is done, what's been merged, or what state the codebase is in. Workers may have merged PRs that your local main doesn't have yet.
 - **Never modify PROJECT_PROMPT.md** — that's the user's spec
 - **Always read before writing** — understand existing code before changing it
 - **Test everything** — write tests for every task. If ambiguous what kind, ask the user
