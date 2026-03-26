@@ -17,6 +17,7 @@ import (
 	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
 	"github.com/natikgadzhi/gdrive-cli/internal/output"
 	"github.com/spf13/cobra"
+	drive "google.golang.org/api/drive/v3"
 )
 
 var (
@@ -106,17 +107,12 @@ Use --dest / -f to control where the file is saved:
 		}
 		config.DebugLog("File: %s (MIME: %s)", metadata.Name, metadata.MimeType)
 
-		// Check that this is a supported Google Workspace type at all.
-		_, supportedType := formatting.GetExportMIME(metadata.MimeType)
-		if !supportedType {
-			return cliError(clierrors.ExitError,
-				"Unsupported file type: %s\n\nSupported types:\n"+
-					"  Google Doc    (application/vnd.google-apps.document)\n"+
-					"  Google Sheet  (application/vnd.google-apps.spreadsheet)\n"+
-					"  Google Slides (application/vnd.google-apps.presentation)",
-				cmd, metadata.MimeType,
-			)
+		// Branch: native Google Workspace type vs. non-native (uploaded) file.
+		if !formatting.IsNativeGoogleType(metadata.MimeType) {
+			return fetchBinaryFile(cmd, svc, metadata, rawURL, format, spin)
 		}
+
+		// --- Native Google Workspace export path ---
 
 		// Resolve the requested export format against the document type.
 		resolved, err := formatting.ResolveExportFormat(metadata.MimeType, fetchExportFormat)
@@ -144,7 +140,11 @@ Use --dest / -f to control where the file is saved:
 
 			mdContent, err := output.ExportAsMarkdown(svc, fileID, metadata.MimeType)
 			if err != nil {
-				return cliError(clierrors.ExitError, "Failed to export as markdown: %s", cmd, err)
+				// Try fallbacks for known export errors.
+				if fallbackErr := handleExportFallback(cmd, svc, metadata, outputPath, rawURL, slug, typeLabel, format, spin, err); fallbackErr != nil {
+					return fallbackErr
+				}
+				return nil
 			}
 
 			// Write the markdown content to the output file.
@@ -178,7 +178,11 @@ Use --dest / -f to control where the file is saved:
 		spin.SetMessage("Downloading file...")
 
 		if err := api.ExportFile(svc, fileID, exportMIME, outputPath); err != nil {
-			return cliError(clierrors.ExitError, "Failed to export file: %s", cmd, err)
+			// Try fallbacks for known export errors.
+			if fallbackErr := handleExportFallback(cmd, svc, metadata, outputPath, rawURL, slug, typeLabel, format, spin, err); fallbackErr != nil {
+				return fallbackErr
+			}
+			return nil
 		}
 
 		// Export as markdown/text for the derived directory.
@@ -254,6 +258,168 @@ func writeDerivedFile(cmd *cobra.Command, slug, typeLabel, sourceURL, body strin
 	}
 	config.DebugLog("Cached to: %s", filePath)
 	return filePath
+}
+
+// fetchBinaryFile handles downloading non-native (uploaded) files from Google
+// Drive via the alt=media binary download path. It determines the file extension
+// from the MIME type or the original filename and saves the file to disk.
+func fetchBinaryFile(
+	cmd *cobra.Command,
+	svc *drive.Service,
+	metadata *api.FileMetadata,
+	rawURL string,
+	format string,
+	spin cliprogress.Indicator,
+) error {
+	// Determine extension and label from known binary MIME types.
+	extension, typeLabel, ok := formatting.GetBinaryTypeInfo(metadata.MimeType)
+	if !ok {
+		// Fall back to the file's original extension.
+		extension = formatting.ExtensionFromFilename(metadata.Name)
+		typeLabel = metadata.MimeType
+	}
+
+	// If the user specified --export, ignore it for non-native files and warn.
+	if fetchExportFormat != "" {
+		config.DebugLog("Warning: --export flag ignored for non-native file type %s", metadata.MimeType)
+	}
+
+	outputPath := resolveOutputPath(fetchDest, metadata.Name, extension)
+	config.DebugLog("Binary download: extension=%s label=%s path=%s", extension, typeLabel, outputPath)
+
+	spin.SetMessage("Downloading file...")
+
+	if err := api.DownloadFile(svc, metadata.ID, outputPath); err != nil {
+		return cliError(clierrors.ExitError, "Failed to download file: %s", cmd, err)
+	}
+
+	spin.Finish()
+	result := fetchResult{
+		Status:  "ok",
+		FileID:  metadata.ID,
+		Name:    metadata.Name,
+		Type:    typeLabel,
+		SavedTo: outputPath,
+		// No derived cache for binary files.
+	}
+	return clioutput.Print(format, result, result)
+}
+
+// handleExportFallback handles fallback logic when a Google Workspace file
+// export fails with specific API errors:
+//
+//   - cannotExportFile (403): Falls back to binary download (alt=media). If that
+//     also fails, returns a helpful error with file metadata.
+//   - exportSizeLimitExceeded (403): Falls back to plain text export, then binary
+//     download. If all fail, returns a helpful error.
+//
+// Returns nil if a fallback succeeded (caller should return nil too), or a
+// non-nil error to propagate.
+func handleExportFallback(
+	cmd *cobra.Command,
+	svc *drive.Service,
+	metadata *api.FileMetadata,
+	outputPath, rawURL, slug, typeLabel string,
+	format string,
+	spin cliprogress.Indicator,
+	exportErr error,
+) error {
+	fileID := metadata.ID
+
+	if api.IsExportSizeLimitExceeded(exportErr) {
+		config.DebugLog("Export size limit exceeded, trying text/plain fallback")
+		spin.SetMessage("File too large, trying plain text export...")
+
+		// Try exporting as text/plain (higher limit).
+		plainTextPath := replaceExtension(outputPath, ".txt")
+		if err := api.ExportFile(svc, fileID, "text/plain", plainTextPath); err != nil {
+			config.DebugLog("Plain text export also failed: %v, trying binary download", err)
+
+			// Try binary download as last resort.
+			spin.SetMessage("Plain text export failed, trying binary download...")
+			if dlErr := api.DownloadFile(svc, fileID, outputPath); dlErr != nil {
+				return cliError(clierrors.ExitError,
+					"File too large to export.\n\n"+
+						"  File:  %s\n"+
+						"  Type:  %s\n"+
+						"  URL:   %s\n\n"+
+						"All export methods failed:\n"+
+						"  - Original export: %s\n"+
+						"  - Plain text export: %s\n"+
+						"  - Binary download: %s",
+					cmd, metadata.Name, typeLabel, rawURL, exportErr, err, dlErr)
+			}
+			// Binary download succeeded.
+			spin.Finish()
+			result := fetchResult{
+				Status:  "ok",
+				FileID:  fileID,
+				Name:    metadata.Name,
+				Type:    typeLabel,
+				SavedTo: outputPath,
+			}
+			return clioutput.Print(format, result, result)
+		}
+
+		// Plain text export succeeded.
+		var cachedTo string
+		if !noCache {
+			// Read back the plain text for derived cache.
+			if data, err := os.ReadFile(plainTextPath); err == nil {
+				cachedTo = writeDerivedFile(cmd, slug, typeLabel, rawURL, string(data))
+			}
+		}
+
+		spin.Finish()
+		result := fetchResult{
+			Status:   "ok",
+			FileID:   fileID,
+			Name:     metadata.Name,
+			Type:     typeLabel,
+			SavedTo:  plainTextPath,
+			CachedTo: cachedTo,
+		}
+		return clioutput.Print(format, result, result)
+	}
+
+	if api.IsCannotExportFile(exportErr) {
+		config.DebugLog("Cannot export file (likely view-only with downloads disabled), trying binary download")
+		spin.SetMessage("Export blocked, trying binary download...")
+
+		if dlErr := api.DownloadFile(svc, fileID, outputPath); dlErr != nil {
+			return cliError(clierrors.ExitError,
+				"Cannot export or download this file. The file owner may have disabled downloads.\n\n"+
+					"  File:  %s\n"+
+					"  Type:  %s\n"+
+					"  URL:   %s\n\n"+
+					"Export error: %s\n"+
+					"Download error: %s",
+				cmd, metadata.Name, typeLabel, rawURL, exportErr, dlErr)
+		}
+
+		// Binary download succeeded.
+		spin.Finish()
+		result := fetchResult{
+			Status:  "ok",
+			FileID:  fileID,
+			Name:    metadata.Name,
+			Type:    typeLabel,
+			SavedTo: outputPath,
+		}
+		return clioutput.Print(format, result, result)
+	}
+
+	// Not a recognized fallback-able error — return the original error.
+	return cliError(clierrors.ExitError, "Failed to export file: %s", cmd, exportErr)
+}
+
+// replaceExtension replaces the file extension in a path with a new one.
+func replaceExtension(path, newExt string) string {
+	ext := filepath.Ext(path)
+	if ext == "" {
+		return path + newExt
+	}
+	return path[:len(path)-len(ext)] + newExt
 }
 
 func init() {

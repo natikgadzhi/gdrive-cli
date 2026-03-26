@@ -151,22 +151,24 @@ Prints an aligned table with columns: NAME, TYPE, MODIFIED, URL.
 gdrive-cli fetch <url> [--export FORMAT] [--dest PATH] [-o json|table]
 ```
 
-Downloads a Google Doc, Sheet, or Slides file and saves it locally.
+Downloads a Google Doc, Sheet, or Slides file and saves it locally. Also supports non-native files uploaded to Google Drive (`.docx`, `.xlsx`, `.pptx`, `.pdf`, etc.) via direct binary download.
 
 | Argument / Option | Default | Description |
 |---|---|---|
 | `url` | required | Full Google Docs/Sheets/Slides URL |
-| `--export` / `-e` | type default | Export format: `docx`, `md`, `csv`, `pptx` (depends on document type) |
+| `--export` / `-e` | type default | Export format: `docx`, `md`, `csv`, `pptx` (depends on document type; ignored for non-native files) |
 | `--dest` / `-f` | auto-generated | Output file path (or directory; auto-generates filename if directory) |
 | `-o` / `--output` | auto | Output format: `json` or `table` |
 
-**Default export formats:**
+**Default export formats (native Google Workspace files):**
 
 | Source type | Default | Other |
 |---|---|---|
 | Google Doc | `.docx` | `.md` |
 | Google Sheet | `.csv` | |
 | Google Slides | `.pptx` | `.md` |
+
+**Non-native files** (uploaded `.docx`, `.xlsx`, `.pdf`, etc.) are downloaded directly in their original format. The `--export` flag is ignored for these files.
 
 **Auto-generated filename:** `<sanitized-title><extension>` in the output directory. Characters `/ \ : * ? " < > |` in the title are replaced with `_`.
 
@@ -191,9 +193,14 @@ URL-encoded characters are decoded before ID extraction.
 }
 ```
 
+**Fallback behavior:**
+
+When exporting native Google Workspace files, the tool handles common API errors gracefully:
+- **View-only files (cannotExportFile)**: Falls back to binary download. If the file owner has disabled downloads entirely, a helpful error is shown with the file name, type, and URL.
+- **Oversized files (exportSizeLimitExceeded)**: Falls back to plain text export (which has a higher size limit), then to binary download if that also fails.
+
 **Errors:**
 - Unrecognized URL format -- lists supported formats
-- Unsupported MIME type (e.g., a plain Drive file, not a Workspace doc) -- lists supported types
 - Output directory is created automatically if it does not exist
 
 ---

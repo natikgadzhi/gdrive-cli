@@ -180,3 +180,59 @@ func validFormatsString(formats map[string]ExportFormatInfo) string {
 	sort.Strings(keys)
 	return strings.Join(keys, " or ")
 }
+
+// IsNativeGoogleType reports whether the MIME type is a native Google Workspace
+// type that requires Files.Export() for download.
+func IsNativeGoogleType(mime string) bool {
+	_, ok := mimeRegistry[mime]
+	return ok
+}
+
+// binaryTypeInfo holds the file extension and label for a non-native MIME type.
+type binaryTypeInfo struct {
+	Extension string
+	Label     string
+}
+
+// binaryMIMEExtensions maps common non-native MIME types that can be downloaded
+// directly via alt=media to their file extension and human-readable label.
+var binaryMIMEExtensions = map[string]binaryTypeInfo{
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   {".docx", "Word Document"},
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         {".xlsx", "Excel Spreadsheet"},
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": {".pptx", "PowerPoint Presentation"},
+	"application/pdf":                {".pdf", "PDF"},
+	"application/msword":             {".doc", "Word Document (Legacy)"},
+	"application/vnd.ms-excel":       {".xls", "Excel Spreadsheet (Legacy)"},
+	"application/vnd.ms-powerpoint":  {".ppt", "PowerPoint (Legacy)"},
+	"text/plain":                     {".txt", "Text File"},
+	"text/csv":                       {".csv", "CSV File"},
+	"application/zip":                {".zip", "ZIP Archive"},
+	"image/png":                      {".png", "PNG Image"},
+	"image/jpeg":                     {".jpg", "JPEG Image"},
+	"application/octet-stream":       {"", "Binary File"},
+}
+
+// GetBinaryTypeInfo returns the extension and label for a non-native MIME type
+// that can be downloaded directly. Returns false if the MIME type is not in
+// the known binary type map.
+func GetBinaryTypeInfo(mime string) (extension string, label string, ok bool) {
+	info, ok := binaryMIMEExtensions[mime]
+	if !ok {
+		return "", "", false
+	}
+	return info.Extension, info.Label, true
+}
+
+// ExtensionFromFilename extracts the file extension from a filename.
+// Returns empty string if no extension is found.
+func ExtensionFromFilename(name string) string {
+	for i := len(name) - 1; i >= 0; i-- {
+		if name[i] == '.' {
+			return name[i:]
+		}
+		if name[i] == '/' || name[i] == '\\' {
+			break
+		}
+	}
+	return ""
+}

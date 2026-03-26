@@ -259,3 +259,93 @@ func TestFetchResolveExportFormat_SlidesAsMarkdown(t *testing.T) {
 		t.Errorf("expected text/plain export MIME for slides->md, got %q", info.ExportMIME)
 	}
 }
+
+// --- Non-native MIME type resolution tests ---
+
+func TestNonNativeMIME_DocxUpload(t *testing.T) {
+	mime := "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+	// Should NOT be a native Google type.
+	if formatting.IsNativeGoogleType(mime) {
+		t.Fatal("uploaded .docx should not be a native Google type")
+	}
+
+	// Should have a known binary type info.
+	ext, label, ok := formatting.GetBinaryTypeInfo(mime)
+	if !ok {
+		t.Fatal("expected GetBinaryTypeInfo to return true for .docx MIME")
+	}
+	if ext != ".docx" {
+		t.Errorf("extension = %q, want %q", ext, ".docx")
+	}
+	if label != "Word Document" {
+		t.Errorf("label = %q, want %q", label, "Word Document")
+	}
+
+	// Output path should use the extension.
+	path := resolveOutputPath("", "My Uploaded Doc", ext)
+	if path != "My Uploaded Doc.docx" {
+		t.Errorf("output path = %q, want %q", path, "My Uploaded Doc.docx")
+	}
+}
+
+func TestNonNativeMIME_PdfUpload(t *testing.T) {
+	mime := "application/pdf"
+
+	if formatting.IsNativeGoogleType(mime) {
+		t.Fatal("PDF should not be a native Google type")
+	}
+
+	ext, label, ok := formatting.GetBinaryTypeInfo(mime)
+	if !ok {
+		t.Fatal("expected GetBinaryTypeInfo to return true for PDF MIME")
+	}
+	if ext != ".pdf" {
+		t.Errorf("extension = %q, want %q", ext, ".pdf")
+	}
+	if label != "PDF" {
+		t.Errorf("label = %q, want %q", label, "PDF")
+	}
+}
+
+func TestNonNativeMIME_UnknownFallsBackToFilename(t *testing.T) {
+	mime := "application/x-custom-format"
+
+	if formatting.IsNativeGoogleType(mime) {
+		t.Fatal("custom format should not be a native Google type")
+	}
+
+	_, _, ok := formatting.GetBinaryTypeInfo(mime)
+	if ok {
+		t.Fatal("expected GetBinaryTypeInfo to return false for unknown MIME")
+	}
+
+	// Should fall back to filename extension.
+	ext := formatting.ExtensionFromFilename("report.xyz")
+	if ext != ".xyz" {
+		t.Errorf("extension = %q, want %q", ext, ".xyz")
+	}
+}
+
+// --- replaceExtension tests ---
+
+func TestReplaceExtension(t *testing.T) {
+	tests := []struct {
+		path   string
+		newExt string
+		want   string
+	}{
+		{"file.docx", ".txt", "file.txt"},
+		{"path/to/file.csv", ".txt", "path/to/file.txt"},
+		{"noext", ".txt", "noext.txt"},
+		{"file.tar.gz", ".txt", "file.tar.txt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path+"->"+tt.newExt, func(t *testing.T) {
+			got := replaceExtension(tt.path, tt.newExt)
+			if got != tt.want {
+				t.Errorf("replaceExtension(%q, %q) = %q, want %q", tt.path, tt.newExt, got, tt.want)
+			}
+		})
+	}
+}
