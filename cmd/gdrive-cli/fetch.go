@@ -351,7 +351,7 @@ func fetchBinaryFile(
 		Name:    metadata.Name,
 		Type:    typeLabel,
 		SavedTo: outputPath,
-		// No derived cache for binary files.
+		// No document body cache for binary files (comments may still be cached).
 	}
 	return clioutput.Print(format, result, result)
 }
@@ -401,6 +401,7 @@ func handleExportFallback(
 					cmd, metadata.Name, typeLabel, rawURL, exportErr, err, dlErr)
 			}
 			// Binary download succeeded.
+			fetchAndCacheComments(cmd, svc, fileID, metadata.Name, slug, spin)
 			spin.Finish()
 			result := fetchResult{
 				Status:  "ok",
@@ -421,6 +422,7 @@ func handleExportFallback(
 			}
 		}
 
+		fetchAndCacheComments(cmd, svc, fileID, metadata.Name, slug, spin)
 		spin.Finish()
 		result := fetchResult{
 			Status:   "ok",
@@ -449,6 +451,7 @@ func handleExportFallback(
 		}
 
 		// Binary download succeeded.
+		fetchAndCacheComments(cmd, svc, fileID, metadata.Name, slug, spin)
 		spin.Finish()
 		result := fetchResult{
 			Status:  "ok",

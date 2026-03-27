@@ -11,7 +11,7 @@ import (
 
 // commentsFields is the fields parameter for the comments.list API call.
 // The Drive API requires explicit field selection for comments.
-const commentsFields = "comments(id,content,htmlContent,author(displayName,me,photoLink),createdTime,modifiedTime,resolved,deleted,replies(id,content,htmlContent,author(displayName,me,photoLink),createdTime,modifiedTime,action,deleted),quotedFileContent),nextPageToken"
+const commentsFields = "comments(id,content,author(displayName,me,photoLink),createdTime,modifiedTime,resolved,deleted,replies(id,content,author(displayName,me,photoLink),createdTime,modifiedTime,action,deleted),quotedFileContent),nextPageToken"
 
 // ListComments fetches all comments (with inline replies) for a Google Drive file.
 // It auto-paginates through all results. Deleted comments are excluded.

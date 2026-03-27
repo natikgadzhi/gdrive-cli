@@ -26,16 +26,17 @@ type CommentAuthor struct {
 }
 
 // CommentReply represents a single reply within a comment thread.
+// Deleted replies are filtered out by ListComments and never returned.
 type CommentReply struct {
 	ID          string        `json:"id"`
 	Author      CommentAuthor `json:"author"`
 	Content     string        `json:"content"`
 	CreatedTime string        `json:"created_time"`
 	Action      string        `json:"action,omitempty"` // "resolve" or "reopen"
-	Deleted     bool          `json:"deleted,omitempty"`
 }
 
 // CommentThread represents a top-level comment and its replies.
+// Deleted comments are filtered out by ListComments and never returned.
 type CommentThread struct {
 	ID           string         `json:"id"`
 	Author       CommentAuthor  `json:"author"`
@@ -45,5 +46,4 @@ type CommentThread struct {
 	ModifiedTime string         `json:"modified_time"`
 	Resolved     bool           `json:"resolved"`
 	Replies      []CommentReply `json:"replies,omitempty"`
-	Deleted      bool           `json:"deleted,omitempty"`
 }
