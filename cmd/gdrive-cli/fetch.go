@@ -23,6 +23,7 @@ import (
 var (
 	fetchDest         string
 	fetchExportFormat string
+	fetchNoComments   bool
 )
 
 // fetchResult is the JSON output for a successful fetch.
@@ -162,6 +163,9 @@ Use --dest / -f to control where the file is saved:
 				cachedTo = writeDerivedFile(cmd, slug, typeLabel, rawURL, mdContent)
 			}
 
+			// Fetch and cache comments.
+			fetchAndCacheComments(cmd, svc, fileID, metadata.Name, slug, spin)
+
 			spin.Finish()
 			result := fetchResult{
 				Status:   "ok",
@@ -199,6 +203,9 @@ Use --dest / -f to control where the file is saved:
 			cachedTo = writeDerivedFile(cmd, slug, typeLabel, rawURL, mdContent)
 		}
 
+		// Fetch and cache comments.
+		fetchAndCacheComments(cmd, svc, fileID, metadata.Name, slug, spin)
+
 		spin.Finish()
 		result := fetchResult{
 			Status:   "ok",
@@ -210,6 +217,46 @@ Use --dest / -f to control where the file is saved:
 		}
 		return clioutput.Print(format, result, result)
 	},
+}
+
+// fetchAndCacheComments fetches comments for a file and writes them as a
+// companion .comments.md file in the derived directory. Failures are non-fatal.
+func fetchAndCacheComments(cmd *cobra.Command, svc *drive.Service, fileID, docName, slug string, spin cliprogress.Indicator) {
+	if fetchNoComments || noCache {
+		return
+	}
+
+	spin.SetMessage("Fetching comments...")
+
+	threads, err := api.ListComments(svc, fileID)
+	if err != nil {
+		config.DebugLog("Warning: failed to fetch comments: %v", err)
+		return
+	}
+
+	if len(threads) == 0 {
+		config.DebugLog("No comments found for file %s", fileID)
+		return
+	}
+
+	body := output.FormatCommentsMarkdown(docName, threads)
+
+	derivedDir := derived.Resolve(cmd, "gdrive-cli")
+	if err := derived.EnsureDir(derivedDir); err != nil {
+		config.DebugLog("Warning: failed to create derived directory for comments: %v", err)
+		return
+	}
+
+	fm := derived.NewFrontmatter("gdrive-cli", "comments", slug+".comments", "", "fetch")
+	content := derived.FormatFile(fm, body)
+
+	filePath := filepath.Join(derivedDir, slug+".comments.md")
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+		config.DebugLog("Warning: failed to write comments file: %v", err)
+		return
+	}
+
+	config.DebugLog("Cached %d comment threads to %s", len(threads), filePath)
 }
 
 // resolveOutputPath determines the output file path from the --dest flag value.
@@ -292,6 +339,10 @@ func fetchBinaryFile(
 	if err := api.DownloadFile(svc, metadata.ID, outputPath); err != nil {
 		return cliError(clierrors.ExitError, "Failed to download file: %s", cmd, err)
 	}
+
+	// Fetch and cache comments (even for non-native files).
+	slug := cache.GenerateSlug(metadata.Name, metadata.ID)
+	fetchAndCacheComments(cmd, svc, metadata.ID, metadata.Name, slug, spin)
 
 	spin.Finish()
 	result := fetchResult{
@@ -425,6 +476,7 @@ func replaceExtension(path, newExt string) string {
 func init() {
 	fetchCmd.Flags().StringVarP(&fetchExportFormat, "export", "e", "", "Export format: docx, md, csv, pptx (depends on document type)")
 	fetchCmd.Flags().StringVarP(&fetchDest, "dest", "f", "", "Output path (file or directory; auto-generates filename if directory)")
+	fetchCmd.Flags().BoolVar(&fetchNoComments, "no-comments", false, "Skip fetching document comments")
 	derived.RegisterFlag(rootCmd, "gdrive-cli")
 	rootCmd.AddCommand(fetchCmd)
 }
