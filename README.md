@@ -148,7 +148,7 @@ Prints an aligned table with columns: NAME, TYPE, MODIFIED, URL.
 ### `fetch`
 
 ```sh
-gdrive-cli fetch <url> [--export FORMAT] [--dest PATH] [-o json|table]
+gdrive-cli fetch <url> [--export FORMAT] [--dest PATH] [--no-comments] [-o json|table]
 ```
 
 Downloads a Google Doc, Sheet, or Slides file and saves it locally. Also supports non-native files uploaded to Google Drive (`.docx`, `.xlsx`, `.pptx`, `.pdf`, etc.) via direct binary download.
@@ -158,6 +158,7 @@ Downloads a Google Doc, Sheet, or Slides file and saves it locally. Also support
 | `url` | required | Full Google Docs/Sheets/Slides URL |
 | `--export` / `-e` | type default | Export format: `docx`, `md`, `csv`, `pptx` (depends on document type; ignored for non-native files) |
 | `--dest` / `-f` | auto-generated | Output file path (or directory; auto-generates filename if directory) |
+| `--no-comments` | `false` | Skip fetching document comments |
 | `-o` / `--output` | auto | Output format: `json` or `table` |
 
 **Default export formats (native Google Workspace files):**
@@ -198,6 +199,24 @@ URL-encoded characters are decoded before ID extraction.
 When exporting native Google Workspace files, the tool handles common API errors gracefully:
 - **View-only files (cannotExportFile)**: Falls back to binary download. If the file owner has disabled downloads entirely, a helpful error is shown with the file name, type, and URL.
 - **Oversized files (exportSizeLimitExceeded)**: Falls back to plain text export (which has a higher size limit), then to binary download if that also fails.
+
+**Comments:**
+
+By default, `fetch` also retrieves all comment threads from the document and saves them as a companion Markdown file in the derived data directory:
+
+```
+~/.local/share/lambdal/derived/gdrive-cli/<slug>.comments.md
+```
+
+The comments file includes:
+- All open and resolved comment threads, grouped by status
+- Author names and dates for each comment and reply
+- Quoted text showing what part of the document each comment refers to
+- Resolve/reopen actions attributed to the acting user
+
+Use `--no-comments` to skip fetching comments. Comments are also skipped when `--no-cache` is set.
+
+Note: the Google Drive API does not expose comment author email addresses -- only display names are available.
 
 **Errors:**
 - Unrecognized URL format -- lists supported formats

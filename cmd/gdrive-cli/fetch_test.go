@@ -26,8 +26,9 @@ func TestFetchCommandFlags(t *testing.T) {
 		shorthand string
 		defValue  string
 	}{
-		"export": {shorthand: "e", defValue: ""},
-		"dest":   {shorthand: "f", defValue: ""},
+		"export":      {shorthand: "e", defValue: ""},
+		"dest":        {shorthand: "f", defValue: ""},
+		"no-comments": {shorthand: "", defValue: "false"},
 	}
 
 	for name, want := range flags {
