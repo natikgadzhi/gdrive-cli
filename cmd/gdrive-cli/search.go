@@ -10,7 +10,7 @@ import (
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
-	"github.com/natikgadzhi/gdrive-cli/internal/table"
+	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 )
 
@@ -83,6 +83,7 @@ var searchCmd = &cobra.Command{
 
 		// Show spinner while searching.
 		spinner := cliprogress.NewSpinner("Searching Google Drive...", format)
+		spinner.Start()
 		defer spinner.Finish()
 
 		results, err := api.SearchFiles(svc, query, searchLimit)

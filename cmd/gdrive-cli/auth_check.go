@@ -5,7 +5,7 @@ import (
 	clioutput "github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
-	"github.com/natikgadzhi/gdrive-cli/internal/table"
+	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 )
 

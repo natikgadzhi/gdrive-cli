@@ -2,7 +2,7 @@ package main
 
 import (
 	clioutput "github.com/natikgadzhi/cli-kit/output"
-	"github.com/natikgadzhi/gdrive-cli/internal/table"
+	"github.com/natikgadzhi/cli-kit/table"
 )
 
 // borderedRenderer is implemented by types that can render themselves
