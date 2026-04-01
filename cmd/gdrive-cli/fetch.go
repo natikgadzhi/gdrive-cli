@@ -16,7 +16,7 @@ import (
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
 	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
 	"github.com/natikgadzhi/gdrive-cli/internal/output"
-	"github.com/natikgadzhi/gdrive-cli/internal/table"
+	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 	drive "google.golang.org/api/drive/v3"
 )
@@ -138,7 +138,7 @@ Use --dest / -f to control where the file is saved:
 		// When exporting as markdown, use the markdown export path which
 		// handles HTML-to-markdown conversion for Docs.
 		if resolved.NeedsMarkdownConversion {
-			spin.SetMessage("Exporting as markdown...")
+			spin.SetLabel("Exporting as markdown...")
 
 			mdContent, err := output.ExportAsMarkdown(svc, fileID, metadata.MimeType)
 			if err != nil {
@@ -180,7 +180,7 @@ Use --dest / -f to control where the file is saved:
 		}
 
 		// Native export path (docx/csv/pptx).
-		spin.SetMessage("Downloading file...")
+		spin.SetLabel("Downloading file...")
 
 		if err := api.ExportFile(svc, fileID, exportMIME, outputPath); err != nil {
 			// Try fallbacks for known export errors.
@@ -191,7 +191,7 @@ Use --dest / -f to control where the file is saved:
 		}
 
 		// Export as markdown/text for the derived directory.
-		spin.SetMessage("Caching derived data...")
+		spin.SetLabel("Caching derived data...")
 
 		mdContent, err := output.ExportAsMarkdown(svc, fileID, metadata.MimeType)
 		if err != nil {
@@ -227,7 +227,7 @@ func fetchAndCacheComments(cmd *cobra.Command, svc *drive.Service, fileID, docNa
 		return
 	}
 
-	spin.SetMessage("Fetching comments...")
+	spin.SetLabel("Fetching comments...")
 
 	threads, err := api.ListComments(svc, fileID)
 	if err != nil {
@@ -335,7 +335,7 @@ func fetchBinaryFile(
 	outputPath := resolveOutputPath(fetchDest, metadata.Name, extension)
 	config.DebugLog("Binary download: extension=%s label=%s path=%s", extension, typeLabel, outputPath)
 
-	spin.SetMessage("Downloading file...")
+	spin.SetLabel("Downloading file...")
 
 	if err := api.DownloadFile(svc, metadata.ID, outputPath); err != nil {
 		return cliError(clierrors.ExitError, "Failed to download file: %s", cmd, err)
@@ -380,7 +380,7 @@ func handleExportFallback(
 
 	if api.IsExportSizeLimitExceeded(exportErr) {
 		config.DebugLog("Export size limit exceeded, trying text/plain fallback")
-		spin.SetMessage("File too large, trying plain text export...")
+		spin.SetLabel("File too large, trying plain text export...")
 
 		// Try exporting as text/plain (higher limit).
 		plainTextPath := replaceExtension(outputPath, ".txt")
@@ -388,7 +388,7 @@ func handleExportFallback(
 			config.DebugLog("Plain text export also failed: %v, trying binary download", err)
 
 			// Try binary download as last resort.
-			spin.SetMessage("Plain text export failed, trying binary download...")
+			spin.SetLabel("Plain text export failed, trying binary download...")
 			if dlErr := api.DownloadFile(svc, fileID, outputPath); dlErr != nil {
 				return cliError(clierrors.ExitError,
 					"File too large to export.\n\n"+
@@ -438,7 +438,7 @@ func handleExportFallback(
 
 	if api.IsCannotExportFile(exportErr) {
 		config.DebugLog("Cannot export file (likely view-only with downloads disabled), trying binary download")
-		spin.SetMessage("Export blocked, trying binary download...")
+		spin.SetLabel("Export blocked, trying binary download...")
 
 		if dlErr := api.DownloadFile(svc, fileID, outputPath); dlErr != nil {
 			return cliError(clierrors.ExitError,
