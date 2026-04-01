@@ -5,6 +5,7 @@ import (
 	clioutput "github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
+	"github.com/natikgadzhi/gdrive-cli/internal/table"
 	"github.com/spf13/cobra"
 )
 
@@ -14,7 +15,7 @@ type authCheckResult struct {
 	Message string `json:"message"`
 }
 
-func (r authCheckResult) RenderTable(t *clioutput.Table) {
+func (r authCheckResult) RenderBorderedTable(t *table.Table) {
 	t.Header("Status", "Message")
 	t.Row(r.Status, r.Message)
 }
@@ -34,7 +35,7 @@ var authCheckCmd = &cobra.Command{
 			Status:  "ok",
 			Message: "Authenticated and credentials are valid.",
 		}
-		return clioutput.Print(format, result, result)
+		return printResult(format, result, result)
 	},
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	clioutput "github.com/natikgadzhi/cli-kit/output"
@@ -9,6 +10,7 @@ import (
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
+	"github.com/natikgadzhi/gdrive-cli/internal/table"
 	"github.com/spf13/cobra"
 )
 
@@ -21,12 +23,27 @@ type searchResponse struct {
 	Results []api.FileResult `json:"results"`
 }
 
-// RenderTable implements cli-kit TableRenderer.
-func (s searchResponse) RenderTable(t *clioutput.Table) {
+// RenderBorderedTable renders search results into a bordered table.
+// Timestamps are formatted as "DD Mon YYYY HH:MM" for human readability.
+func (s searchResponse) RenderBorderedTable(t *table.Table) {
 	t.Header("Name", "Type", "Modified", "URL")
 	for _, r := range s.Results {
-		t.Row(r.Name, r.Type, r.Modified, r.URL)
+		t.Row(r.Name, r.Type, formatTimestamp(r.Modified), r.URL)
 	}
+}
+
+// formatTimestamp converts an RFC 3339 timestamp to "02 Jan 2006 15:04" format.
+// Returns the original string if parsing fails.
+func formatTimestamp(rfc3339 string) string {
+	t, err := time.Parse(time.RFC3339, rfc3339)
+	if err != nil {
+		// Try the variant with fractional seconds and Z suffix.
+		t, err = time.Parse("2006-01-02T15:04:05.000Z", rfc3339)
+		if err != nil {
+			return rfc3339
+		}
+	}
+	return t.Format("02 Jan 2006 15:04")
 }
 
 var searchCmd = &cobra.Command{
@@ -80,7 +97,7 @@ var searchCmd = &cobra.Command{
 			Count:   len(results),
 			Results: results,
 		}
-		return clioutput.Print(format, resp, resp)
+		return printResult(format, resp, resp)
 	},
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
 	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
 	"github.com/natikgadzhi/gdrive-cli/internal/output"
+	"github.com/natikgadzhi/gdrive-cli/internal/table"
 	"github.com/spf13/cobra"
 	drive "google.golang.org/api/drive/v3"
 )
@@ -36,8 +37,8 @@ type fetchResult struct {
 	CachedTo string `json:"cached_to,omitempty"`
 }
 
-// RenderTable implements cli-kit TableRenderer.
-func (r fetchResult) RenderTable(t *clioutput.Table) {
+// RenderBorderedTable renders fetch results into a bordered table.
+func (r fetchResult) RenderBorderedTable(t *table.Table) {
 	t.Header("STATUS", "NAME", "TYPE", "SAVED TO")
 	t.Row(r.Status, r.Name, r.Type, r.SavedTo)
 }
@@ -175,7 +176,7 @@ Use --dest / -f to control where the file is saved:
 				SavedTo:  outputPath,
 				CachedTo: cachedTo,
 			}
-			return clioutput.Print(format, result, result)
+			return printResult(format, result, result)
 		}
 
 		// Native export path (docx/csv/pptx).
@@ -215,7 +216,7 @@ Use --dest / -f to control where the file is saved:
 			SavedTo:  outputPath,
 			CachedTo: cachedTo,
 		}
-		return clioutput.Print(format, result, result)
+		return printResult(format, result, result)
 	},
 }
 
@@ -353,7 +354,7 @@ func fetchBinaryFile(
 		SavedTo: outputPath,
 		// No document body cache for binary files (comments may still be cached).
 	}
-	return clioutput.Print(format, result, result)
+	return printResult(format, result, result)
 }
 
 // handleExportFallback handles fallback logic when a Google Workspace file
@@ -410,7 +411,7 @@ func handleExportFallback(
 				Type:    typeLabel,
 				SavedTo: outputPath,
 			}
-			return clioutput.Print(format, result, result)
+			return printResult(format, result, result)
 		}
 
 		// Plain text export succeeded.
@@ -432,7 +433,7 @@ func handleExportFallback(
 			SavedTo:  plainTextPath,
 			CachedTo: cachedTo,
 		}
-		return clioutput.Print(format, result, result)
+		return printResult(format, result, result)
 	}
 
 	if api.IsCannotExportFile(exportErr) {
@@ -460,7 +461,7 @@ func handleExportFallback(
 			Type:    typeLabel,
 			SavedTo: outputPath,
 		}
-		return clioutput.Print(format, result, result)
+		return printResult(format, result, result)
 	}
 
 	// Not a recognized fallback-able error — return the original error.
