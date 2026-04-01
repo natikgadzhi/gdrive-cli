@@ -5,6 +5,7 @@ import (
 	clioutput "github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
+	"github.com/natikgadzhi/gdrive-cli/internal/table"
 	"github.com/spf13/cobra"
 )
 
@@ -14,7 +15,7 @@ type authLoginResult struct {
 	Message string `json:"message"`
 }
 
-func (r authLoginResult) RenderTable(t *clioutput.Table) {
+func (r authLoginResult) RenderBorderedTable(t *table.Table) {
 	t.Header("Status", "Message")
 	t.Row(r.Status, r.Message)
 }
@@ -33,7 +34,7 @@ var authLoginCmd = &cobra.Command{
 			Status:  "ok",
 			Message: "Successfully authenticated with Google Drive.",
 		}
-		return clioutput.Print(format, result, result)
+		return printResult(format, result, result)
 	},
 }
 
