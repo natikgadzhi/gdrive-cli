@@ -3,15 +3,14 @@ package api
 import (
 	"fmt"
 
+	"github.com/natikgadzhi/cli-kit/debug"
 	drive "google.golang.org/api/drive/v3"
-
-	"github.com/natikgadzhi/gdrive-cli/internal/config"
 )
 
 // GetFileMetadata fetches metadata for a single file from Google Drive.
 // It returns the file's ID, name, MIME type, and web view link.
 func GetFileMetadata(svc *drive.Service, fileID string) (*FileMetadata, error) {
-	config.DebugLog("Fetching metadata for file %s", fileID)
+	debug.Log("Fetching metadata for file %s", fileID)
 
 	file, err := svc.Files.Get(fileID).
 		SupportsAllDrives(true).

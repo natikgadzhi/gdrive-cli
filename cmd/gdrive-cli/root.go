@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/natikgadzhi/cli-kit/debug"
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	clioutput "github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/version"
-	"github.com/natikgadzhi/gdrive-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +20,6 @@ var (
 )
 
 var (
-	debug   bool
 	noCache bool
 )
 
@@ -64,7 +63,6 @@ var rootCmd = &cobra.Command{
 	Short: "CLI tool for Google Drive",
 	Long:  "A command-line tool to search and download Google Docs, Sheets, and Slides via the Google Drive API.",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		config.SetDebug(debug)
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -80,10 +78,10 @@ func init() {
 	versionInfo.Commit = Commit
 	versionInfo.Date = Date
 
-	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Print verbose debug logs to stderr")
 	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "Skip writing to derived directory")
 
 	// Register cli-kit flags.
+	debug.RegisterFlag(rootCmd)
 	clioutput.RegisterFlag(rootCmd)
 
 	// Register version command and --version flag.

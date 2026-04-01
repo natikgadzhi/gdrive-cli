@@ -3,10 +3,9 @@ package api
 import (
 	"fmt"
 
+	"github.com/natikgadzhi/cli-kit/debug"
 	drive "google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
-
-	"github.com/natikgadzhi/gdrive-cli/internal/config"
 )
 
 // commentsFields is the fields parameter for the comments.list API call.
@@ -16,7 +15,7 @@ const commentsFields = "comments(id,content,author(displayName,me,photoLink),cre
 // ListComments fetches all comments (with inline replies) for a Google Drive file.
 // It auto-paginates through all results. Deleted comments are excluded.
 func ListComments(svc *drive.Service, fileID string) ([]CommentThread, error) {
-	config.DebugLog("Fetching comments for file %s", fileID)
+	debug.Log("Fetching comments for file %s", fileID)
 
 	var threads []CommentThread
 
@@ -77,6 +76,6 @@ func ListComments(svc *drive.Service, fileID string) ([]CommentThread, error) {
 		return nil, fmt.Errorf("failed to list comments: %w", err)
 	}
 
-	config.DebugLog("Fetched %d comment threads", len(threads))
+	debug.Log("Fetched %d comment threads", len(threads))
 	return threads, nil
 }

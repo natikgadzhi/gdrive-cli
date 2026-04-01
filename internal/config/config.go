@@ -3,39 +3,9 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 )
-
-var (
-	debugEnabled bool
-	debugMu      sync.RWMutex
-)
-
-// SetDebug enables or disables debug logging.
-func SetDebug(enabled bool) {
-	debugMu.Lock()
-	defer debugMu.Unlock()
-	debugEnabled = enabled
-}
-
-// Debug returns whether debug mode is currently enabled.
-func Debug() bool {
-	debugMu.RLock()
-	defer debugMu.RUnlock()
-	return debugEnabled
-}
-
-// DebugLog prints a formatted message to stderr when debug mode is on.
-// Arguments are handled in the manner of fmt.Fprintf.
-func DebugLog(msg string, args ...any) {
-	if !Debug() {
-		return
-	}
-	fmt.Fprintf(os.Stderr, "[DEBUG] "+msg+"\n", args...)
-}
 
 // ConfigDir returns the directory for configuration files.
 // It checks the GDRIVE_CONFIG_DIR environment variable first,

@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/natikgadzhi/cli-kit/debug"
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	clioutput "github.com/natikgadzhi/cli-kit/output"
 	cliprogress "github.com/natikgadzhi/cli-kit/progress"
+	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
-	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 )
 
@@ -67,7 +68,7 @@ var searchCmd = &cobra.Command{
 			return cliError(clierrors.ExitError, "search query must not be empty", cmd)
 		}
 
-		config.DebugLog("Searching for %q with limit=%d", query, searchLimit)
+		debug.Log("Searching for %q with limit=%d", query, searchLimit)
 
 		// Authenticate.
 		token, oauthConfig, err := auth.GetCredentials(config.ConfigDir())

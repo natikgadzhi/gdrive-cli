@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
+
+	cliauth "github.com/natikgadzhi/cli-kit/auth"
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	clioutput "github.com/natikgadzhi/cli-kit/output"
+	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
-	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 )
 
@@ -26,14 +29,14 @@ var authCheckCmd = &cobra.Command{
 	Long:  "Checks whether stored credentials exist and are valid (or refreshable).",
 	Example: `  gdrive-cli auth check`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		_, _, err := auth.GetCredentials(config.ConfigDir())
+		token, _, err := auth.GetCredentials(config.ConfigDir())
 		if err != nil {
 			return cliError(clierrors.ExitAuthError, "Not authenticated. Run `gdrive-cli auth login` first.", cmd)
 		}
 		format := clioutput.Resolve(cmd)
 		result := authCheckResult{
 			Status:  "ok",
-			Message: "Authenticated and credentials are valid.",
+			Message: fmt.Sprintf("Authenticated (token: %s).", cliauth.MaskToken(token.AccessToken)),
 		}
 		return printResult(format, result, result)
 	},

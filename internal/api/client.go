@@ -4,17 +4,16 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/natikgadzhi/cli-kit/debug"
 	"golang.org/x/oauth2"
 	drive "google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
-
-	"github.com/natikgadzhi/gdrive-cli/internal/config"
 )
 
 // NewDriveService builds an authenticated Google Drive v3 service
 // using the provided OAuth2 token and config.
 func NewDriveService(token *oauth2.Token, oauthConfig *oauth2.Config) (*drive.Service, error) {
-	config.DebugLog("Creating Drive service with OAuth token")
+	debug.Log("Creating Drive service with OAuth token")
 	client := oauthConfig.Client(context.Background(), token)
 	return drive.NewService(context.Background(), option.WithHTTPClient(client))
 }

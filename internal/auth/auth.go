@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/natikgadzhi/cli-kit/debug"
 	"golang.org/x/oauth2"
 
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
@@ -33,12 +34,12 @@ func GetCredentials(configDir string) (*oauth2.Token, *oauth2.Config, error) {
 
 	// If token is still valid, return it as-is.
 	if token.Valid() {
-		config.DebugLog("Token is valid, no refresh needed")
+		debug.Log("Token is valid, no refresh needed")
 		return token, oauthConfig, nil
 	}
 
 	// Try to refresh the token.
-	config.DebugLog("Token expired, attempting refresh")
+	debug.Log("Token expired, attempting refresh")
 	tokenSource := oauthConfig.TokenSource(context.Background(), token)
 	newToken, err := tokenSource.Token()
 	if err != nil {
@@ -49,9 +50,9 @@ func GetCredentials(configDir string) (*oauth2.Token, *oauth2.Config, error) {
 
 	// Save the refreshed token if it changed.
 	if newToken.AccessToken != token.AccessToken {
-		config.DebugLog("Token was refreshed, saving new token")
+		debug.Log("Token was refreshed, saving new token")
 		if err := SaveToken(newToken, tokenPath); err != nil {
-			config.DebugLog("Warning: failed to save refreshed token: %v", err)
+			debug.Log("Warning: failed to save refreshed token: %v", err)
 		}
 	}
 

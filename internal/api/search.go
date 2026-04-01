@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/natikgadzhi/cli-kit/debug"
 	drive "google.golang.org/api/drive/v3"
 
-	"github.com/natikgadzhi/gdrive-cli/internal/config"
 	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
 )
 
@@ -27,7 +27,7 @@ func SearchFiles(svc *drive.Service, query string, maxResults int) ([]FileResult
 	fullQuery := fmt.Sprintf("(%s) and (name contains '%s' or fullText contains '%s') and trashed = false",
 		typeFilter, escaped, escaped)
 
-	config.DebugLog("Drive API query: %s", fullQuery)
+	debug.Log("Drive API query: %s", fullQuery)
 
 	call := svc.Files.List().
 		Q(fullQuery).
@@ -53,6 +53,6 @@ func SearchFiles(svc *drive.Service, query string, maxResults int) ([]FileResult
 		})
 	}
 
-	config.DebugLog("Search returned %d results", len(results))
+	debug.Log("Search returned %d results", len(results))
 	return results, nil
 }

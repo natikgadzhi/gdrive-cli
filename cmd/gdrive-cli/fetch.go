@@ -6,17 +6,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	clierrors "github.com/natikgadzhi/cli-kit/errors"
+	"github.com/natikgadzhi/cli-kit/debug"
 	"github.com/natikgadzhi/cli-kit/derived"
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	clioutput "github.com/natikgadzhi/cli-kit/output"
 	cliprogress "github.com/natikgadzhi/cli-kit/progress"
+	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/natikgadzhi/gdrive-cli/internal/api"
 	"github.com/natikgadzhi/gdrive-cli/internal/auth"
 	"github.com/natikgadzhi/gdrive-cli/internal/cache"
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
 	"github.com/natikgadzhi/gdrive-cli/internal/formatting"
 	"github.com/natikgadzhi/gdrive-cli/internal/output"
-	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 	drive "google.golang.org/api/drive/v3"
 )
@@ -85,7 +86,7 @@ Use --dest / -f to control where the file is saved:
 		if err != nil {
 			return cliError(clierrors.ExitError, "%s", cmd, err)
 		}
-		config.DebugLog("Parsed file ID: %s", fileID)
+		debug.Log("Parsed file ID: %s", fileID)
 
 		// Authenticate.
 		token, oauthConfig, err := auth.GetCredentials(config.ConfigDir())
@@ -107,7 +108,7 @@ Use --dest / -f to control where the file is saved:
 		if err != nil {
 			return cliError(clierrors.ExitError, "Failed to get file metadata: %s", cmd, err)
 		}
-		config.DebugLog("File: %s (MIME: %s)", metadata.Name, metadata.MimeType)
+		debug.Log("File: %s (MIME: %s)", metadata.Name, metadata.MimeType)
 
 		// Branch: native Google Workspace type vs. non-native (uploaded) file.
 		if !formatting.IsNativeGoogleType(metadata.MimeType) {
@@ -126,11 +127,11 @@ Use --dest / -f to control where the file is saved:
 		extension := resolved.Extension
 		typeLabel, _ := formatting.GetTypeLabel(metadata.MimeType)
 
-		config.DebugLog("Export format: MIME=%s ext=%s markdown=%v", exportMIME, extension, resolved.NeedsMarkdownConversion)
+		debug.Log("Export format: MIME=%s ext=%s markdown=%v", exportMIME, extension, resolved.NeedsMarkdownConversion)
 
 		// Determine output path from the --dest flag.
 		outputPath := resolveOutputPath(fetchDest, metadata.Name, extension)
-		config.DebugLog("Output path: %s", outputPath)
+		debug.Log("Output path: %s", outputPath)
 
 		// Build slug for derived directory.
 		slug := cache.GenerateSlug(metadata.Name, fileID)
@@ -196,7 +197,7 @@ Use --dest / -f to control where the file is saved:
 		mdContent, err := output.ExportAsMarkdown(svc, fileID, metadata.MimeType)
 		if err != nil {
 			// Cache failure is non-fatal -- log it and continue.
-			config.DebugLog("Warning: failed to export markdown for cache: %v", err)
+			debug.Log("Warning: failed to export markdown for cache: %v", err)
 		}
 
 		var cachedTo string
@@ -231,12 +232,12 @@ func fetchAndCacheComments(cmd *cobra.Command, svc *drive.Service, fileID, docNa
 
 	threads, err := api.ListComments(svc, fileID)
 	if err != nil {
-		config.DebugLog("Warning: failed to fetch comments: %v", err)
+		debug.Log("Warning: failed to fetch comments: %v", err)
 		return
 	}
 
 	if len(threads) == 0 {
-		config.DebugLog("No comments found for file %s", fileID)
+		debug.Log("No comments found for file %s", fileID)
 		return
 	}
 
@@ -244,7 +245,7 @@ func fetchAndCacheComments(cmd *cobra.Command, svc *drive.Service, fileID, docNa
 
 	derivedDir := derived.Resolve(cmd, "gdrive-cli")
 	if err := derived.EnsureDir(derivedDir); err != nil {
-		config.DebugLog("Warning: failed to create derived directory for comments: %v", err)
+		debug.Log("Warning: failed to create derived directory for comments: %v", err)
 		return
 	}
 
@@ -253,11 +254,11 @@ func fetchAndCacheComments(cmd *cobra.Command, svc *drive.Service, fileID, docNa
 
 	filePath := filepath.Join(derivedDir, slug+".comments.md")
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
-		config.DebugLog("Warning: failed to write comments file: %v", err)
+		debug.Log("Warning: failed to write comments file: %v", err)
 		return
 	}
 
-	config.DebugLog("Cached %d comment threads to %s", len(threads), filePath)
+	debug.Log("Cached %d comment threads to %s", len(threads), filePath)
 }
 
 // resolveOutputPath determines the output file path from the --dest flag value.
@@ -292,7 +293,7 @@ func resolveOutputPath(flagValue, docTitle, extension string) string {
 func writeDerivedFile(cmd *cobra.Command, slug, typeLabel, sourceURL, body string) string {
 	derivedDir := derived.Resolve(cmd, "gdrive-cli")
 	if err := derived.EnsureDir(derivedDir); err != nil {
-		config.DebugLog("Warning: failed to create derived directory: %v", err)
+		debug.Log("Warning: failed to create derived directory: %v", err)
 		return ""
 	}
 
@@ -301,10 +302,10 @@ func writeDerivedFile(cmd *cobra.Command, slug, typeLabel, sourceURL, body strin
 
 	filePath := filepath.Join(derivedDir, slug+".md")
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
-		config.DebugLog("Warning: failed to write derived file: %v", err)
+		debug.Log("Warning: failed to write derived file: %v", err)
 		return ""
 	}
-	config.DebugLog("Cached to: %s", filePath)
+	debug.Log("Cached to: %s", filePath)
 	return filePath
 }
 
@@ -329,11 +330,11 @@ func fetchBinaryFile(
 
 	// If the user specified --export, ignore it for non-native files and warn.
 	if fetchExportFormat != "" {
-		config.DebugLog("Warning: --export flag ignored for non-native file type %s", metadata.MimeType)
+		debug.Log("Warning: --export flag ignored for non-native file type %s", metadata.MimeType)
 	}
 
 	outputPath := resolveOutputPath(fetchDest, metadata.Name, extension)
-	config.DebugLog("Binary download: extension=%s label=%s path=%s", extension, typeLabel, outputPath)
+	debug.Log("Binary download: extension=%s label=%s path=%s", extension, typeLabel, outputPath)
 
 	spin.SetLabel("Downloading file...")
 
@@ -379,13 +380,13 @@ func handleExportFallback(
 	fileID := metadata.ID
 
 	if api.IsExportSizeLimitExceeded(exportErr) {
-		config.DebugLog("Export size limit exceeded, trying text/plain fallback")
+		debug.Log("Export size limit exceeded, trying text/plain fallback")
 		spin.SetLabel("File too large, trying plain text export...")
 
 		// Try exporting as text/plain (higher limit).
 		plainTextPath := replaceExtension(outputPath, ".txt")
 		if err := api.ExportFile(svc, fileID, "text/plain", plainTextPath); err != nil {
-			config.DebugLog("Plain text export also failed: %v, trying binary download", err)
+			debug.Log("Plain text export also failed: %v, trying binary download", err)
 
 			// Try binary download as last resort.
 			spin.SetLabel("Plain text export failed, trying binary download...")
@@ -437,7 +438,7 @@ func handleExportFallback(
 	}
 
 	if api.IsCannotExportFile(exportErr) {
-		config.DebugLog("Cannot export file (likely view-only with downloads disabled), trying binary download")
+		debug.Log("Cannot export file (likely view-only with downloads disabled), trying binary download")
 		spin.SetLabel("Export blocked, trying binary download...")
 
 		if dlErr := api.DownloadFile(svc, fileID, outputPath); dlErr != nil {

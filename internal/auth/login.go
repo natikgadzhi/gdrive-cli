@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	cliauth "github.com/natikgadzhi/cli-kit/auth"
+	"github.com/natikgadzhi/cli-kit/debug"
 	"golang.org/x/oauth2"
 
 	"github.com/natikgadzhi/gdrive-cli/internal/config"
@@ -45,13 +47,13 @@ func Login(configDir string) error {
 		return err
 	}
 
-	config.DebugLog("client_id: %s", oauthConfig.ClientID)
-	config.DebugLog("scopes: %v", oauthConfig.Scopes)
+	debug.Log("client_id: %s", cliauth.MaskToken(oauthConfig.ClientID))
+	debug.Log("scopes: %v", oauthConfig.Scopes)
 
 	// Set the redirect URI to our local callback server.
 	redirectURI := fmt.Sprintf("http://localhost:%d/", callbackPort)
 	oauthConfig.RedirectURL = redirectURI
-	config.DebugLog("redirect_uri set to: %s", redirectURI)
+	debug.Log("redirect_uri set to: %s", redirectURI)
 
 	// Generate a random state parameter for CSRF protection.
 	state, err := randomState()
@@ -61,8 +63,8 @@ func Login(configDir string) error {
 
 	// Build the authorization URL.
 	authURL := oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
-	config.DebugLog("OAuth state: %s", state)
-	config.DebugLog("Full auth URL:\n  %s", authURL)
+	debug.Log("OAuth state: %s", state)
+	debug.Log("Full auth URL:\n  %s", authURL)
 
 	// Start the local callback server.
 	codeChan := make(chan string, 1)
@@ -72,7 +74,7 @@ func Login(configDir string) error {
 	var requestCount atomic.Int32
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		count := requestCount.Add(1)
-		config.DebugLog("HTTP request #%d: %s %s from %s", count, r.Method, r.URL.String(), r.RemoteAddr)
+		debug.Log("HTTP request #%d: %s %s from %s", count, r.Method, r.URL.String(), r.RemoteAddr)
 
 		// Enforce max request limit.
 		if int(count) > maxRequests {
@@ -95,7 +97,7 @@ func Login(configDir string) error {
 
 		if code == "" {
 			// This is likely a favicon or preflight request; ignore it.
-			config.DebugLog("No auth code in request #%d, ignoring", count)
+			debug.Log("No auth code in request #%d, ignoring", count)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -111,7 +113,7 @@ func Login(configDir string) error {
 		// Success! Return the code.
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, "<html><body><h2>Authentication successful!</h2><p>You can close this tab.</p></body></html>")
-		config.DebugLog("Received auth code after %d request(s)", count)
+		debug.Log("Received auth code after %d request(s)", count)
 		codeChan <- code
 	})
 
@@ -126,7 +128,7 @@ func Login(configDir string) error {
 		WriteTimeout: serverTimeout,
 	}
 
-	config.DebugLog("Local server listening on localhost:%d", callbackPort)
+	debug.Log("Local server listening on localhost:%d", callbackPort)
 
 	// Run server in a goroutine.
 	go func() {
@@ -141,11 +143,11 @@ func Login(configDir string) error {
 	openBrowser(authURL)
 
 	// Wait for the auth code or an error.
-	config.DebugLog("Waiting for OAuth callback...")
+	debug.Log("Waiting for OAuth callback...")
 	var code string
 	select {
 	case code = <-codeChan:
-		config.DebugLog("Got authorization code")
+		debug.Log("Got authorization code")
 	case err := <-errChan:
 		_ = server.Shutdown(context.Background())
 		return err
@@ -158,18 +160,18 @@ func Login(configDir string) error {
 	_ = server.Shutdown(context.Background())
 
 	// Exchange the authorization code for a token.
-	config.DebugLog("Exchanging code for token...")
+	debug.Log("Exchanging code for token...")
 	token, err := oauthConfig.Exchange(context.Background(), code)
 	if err != nil {
 		return fmt.Errorf("token exchange failed: %w", err)
 	}
-	config.DebugLog("Token exchange successful!")
+	debug.Log("Token exchange successful!")
 
 	// Save the token.
 	if err := SaveToken(token, tokenPath); err != nil {
 		return fmt.Errorf("saving token: %w", err)
 	}
-	config.DebugLog("Token saved to %s", tokenPath)
+	debug.Log("Token saved to %s", tokenPath)
 
 	return nil
 }
@@ -196,10 +198,10 @@ func openBrowser(url string) {
 	case "windows":
 		cmd = exec.Command("cmd", "/c", "start", url)
 	default:
-		config.DebugLog("Unsupported platform for browser opening: %s", runtime.GOOS)
+		debug.Log("Unsupported platform for browser opening: %s", runtime.GOOS)
 		return
 	}
 	if err := cmd.Start(); err != nil {
-		config.DebugLog("Failed to open browser: %v", err)
+		debug.Log("Failed to open browser: %v", err)
 	}
 }
