@@ -11,18 +11,18 @@ go test -tags integration ./tests/integration/...  # Run integration tests (requ
 
 # Multi-agent Work Environment
 
+Builds in this repo run as Workflows, Claude Code's multi-agent mode, not as agent teams. Start build sessions with `/effort ultracode` (or `claude --effort ultracode`) so each phase can run as a workflow without asking first. Without ultracode, propose the phase's workflow with a rough agent count and wait for the user to write `ultracode` or "use a workflow".
+
 ## How It Works
 
-1. The user edits `PROJECT_PROMPT.md` or `README.md` with their project description
-2. The lead agent (you, when running in the root of this repo) reads it
-3. You decompose the project into a phased task plan
-4. You spawn worker agents via the `Agent` tool to execute tasks in parallel
-5. Workers build code, write tests, and commit their work
-6. You coordinate, review, and handle integration
+1. The user describes the project in `PROJECT_PROMPT.md` and `README.md`
+2. The lead (you, the main session) reads them, agrees on a plan with the user, and writes it as phased task files in `tasks/backlog/`
+3. Each phase runs as one workflow: builder agents implement the phase's tasks in parallel, each in its own worktree, and open a pull request; reviewer agents review each PR as soon as it opens; builders fix what reviewers flag
+4. Between phases the lead stays in the loop: reads the workflow's result, merges approved PRs, keeps `main` up to date, and checks in with the user before starting the next phase
 
-## Lead Agent Behavior
+## Lead Behavior
 
-When the user says **"build"**, **"go"**, **"start"**, or **"launch"**:
+The user will first discuss the high level plan with you. Once the user confirms we're good to start work:
 
 1. **Read** `README.md` and other top-level docs to understand the project
 2. **Plan** — Break the project into phases and tasks:
@@ -31,87 +31,70 @@ When the user says **"build"**, **"go"**, **"start"**, or **"launch"**:
    - **Phase 2: Implementation** — Feature implementation (parallelize heavily here)
    - **Phase 3: Integration** — Wire components together, integration tests
    - **Phase 4: Polish** — Error handling, edge cases, documentation, final tests
-3. **Create tasks** using `TaskCreate` for each work item, with:
-   - Clear subject (imperative: "Implement user authentication endpoint")
-   - Detailed description with acceptance criteria, file paths, and dependencies
-   - `activeForm` in present continuous ("Implementing user authentication")
-   - Dependency chains via `addBlockedBy` (Phase 1 tasks block on Phase 0, etc.)
-4. **Spawn workers** using the `Agent` tool with `subagent_type: "general-purpose"`
-   - Spawn 3-6 workers depending on project complexity
-   - Pass the task ID and full task details explicitly in each worker's `prompt`
-   - Name them descriptively in the description: `builder-1`, `builder-2`, `reviewer`, `tester`, etc.
-   - Generally prefer reviewers to have larger context and bigger models.
-   - Keep the main checkout on `main` branch and `git pull --ff` after each task is completed and merged.
-5. **Assign tasks** to idle workers as they become available
-6. **Monitor progress** — poll `TaskList`/`TaskGet` to track worker progress; spawn the next worker when one completes
-7. **Handle conflicts** — if workers produce conflicting changes, resolve them
-8. **Shut down** when all tasks are complete
+3. **Write task files** in `tasks/backlog/`, each with:
+   - Clear imperative title ("Implement user authentication endpoint")
+   - Acceptance criteria, file paths, and dependencies
+   - Edge cases that are covered, and edge cases that are not important
+   - Tasks within one phase must be independent of each other. If task B needs task A's output, B goes in a later phase.
+4. **Run the phase as a workflow** (load the `workflow-authoring` skill before writing the script):
+   - `pipeline()` over the phase's task files with stages build → review → fix, so each PR goes to review as soon as it is ready. No barrier between build and review.
+   - Builders run with `isolation: 'worktree'` and follow Builder Instructions below. They return the branch, PR URL, check results, and edge cases covered and not covered (use a `schema`).
+   - Reviewers follow Reviewer Instructions below. Use two per PR with different lenses (correctness and tests; security and simplicity) and a higher `effort` than the builders. They post their review on the PR and return a verdict.
+   - On "changes requested", a builder addresses the feedback on the same branch and the PR goes back to review. Allow at most 2 rounds, then return the PR as unresolved instead of looping.
+   - Builders and reviewers inherit the session model; only set `model` if the user asks.
+5. **Merge** once the workflow returns: merge approved PRs one at a time, rebasing the next branch if an earlier merge conflicts with it, and `git pull --ff` on `main` after each. Report unresolved PRs to the user.
+6. **Repeat** for the next phase, and stop when all tasks are done
 
-## Worker Agent Instructions
+## Builder Instructions
 
-Workers are spawned by the lead via the `Agent` tool. The lead passes the task ID and description in the prompt. Each worker MUST:
+Builders run inside the phase workflow, each in its own worktree. The lead passes the task file path and full task details in the prompt. Each builder MUST:
 
-1. **Read the task** with `TaskGet <task-id>` to get full requirements
-2. **Mark it in-progress** with `TaskUpdate`
-3. **Create a git worktree** — ALWAYS use a worktree, never work in the main checkout:
+1. **Read the task file** and the existing code it touches before writing anything
+2. **Branch** off the latest `main` as `task-N-description`, and move the task file from `tasks/backlog/` to `tasks/in-progress/` in the first commit
+3. **Implement the task** — write code, tests, configs as needed
+4. **Verify the work** — run the project's quality checks:
 
-   ```bash
-   git fetch origin && git pull --ff   # in main checkout first
-   git worktree add ../slack-cli-task-N -b task-N-description
-   cd ../slack-cli-task-N
-   ```
+- `go build ./...` — builds cleanly
+- `go vet ./...` — no vet errors
+- `go test ./...` — all tests pass
+- You are _required_ to have a strong suite of tests that follows the best practice for the project language.
+- You are _required_ to run the project's linter and fix all lint errors before committing.
 
-   - Each task gets its own worktree AND its own branch
-   - Branch off the latest `main`
-   - Work exclusively inside the worktree directory
-
-4. **Read existing code** before writing — understand the current state
-5. **Implement the task** — write code, tests, configs as needed
-6. **Verify the work** — run the project's quality checks:
-   - `go build ./...` — builds cleanly
-   - `go vet ./...` — no vet errors
-   - `go test ./...` — all tests pass
-7. **Commit the work** with a descriptive message (include task ID):
+5. **Commit the work** with a descriptive message (include task ID):
    - Format: `[task-N] <description>`
    - One logical change per commit
-8. **Push and create a pull request** — MANDATORY for every task with code changes:
+6. **Move the task file** to `tasks/done/` in the PR's last commit, so merging the PR marks the task done
+7. **Push and create a pull request** — MANDATORY for every task with code changes:
 
    ```bash
    git push -u origin task-N-description
    gh pr create --title "type(feat/doc/chore/ref) [task-N] description" --body "..."
    ```
 
-   - Every code change goes through a PR. No direct commits to `main`.
-9. **Update the task** via `TaskUpdate` with PR URL and status, so the lead knows to assign a reviewer
-10. **Respond to review comments**, push fixes, then merge the PR
-11. **Clean up the worktree** after merge:
-    ```bash
-    cd /path/to/main/checkout
-    git worktree remove ../slack-cli-task-N
-    ```
-12. **Mark the task completed** with `TaskUpdate` (status: completed)
+   - Every code change goes through a PR. No direct commits to `main` are allowed.
 
-## Reviewer Agent Instructions
+8. **Return** the PR URL, check results, and the edge cases covered and not covered
+9. **Address review feedback** on the same branch and push. Resolve all of it, unless a change would introduce a security problem the reviewer did not catch; then say so on the PR.
 
-Reviewers are spawned by the lead with the PR number and task ID in their prompt. The reviewer MUST:
+## Reviewer Instructions
 
-1. **Check out the PR branch** in a worktree:
-   ```bash
-   git worktree add ../slack-cli-review-N origin/task-N-description
-   cd ../slack-cli-review-N
-   ```
-2. **Check for conflicts** — ensure the branch rebases cleanly on latest `main`. If conflicts exist, flag them and request the worker to rebase.
+Reviewers run inside the phase workflow with the PR number, the task file path, and their review lens in the prompt. Each reviewer MUST:
+
+1. **Check out the PR** in its worktree with `gh pr checkout <number>`
+2. **Check for conflicts** — ensure the branch rebases cleanly on latest `main`. If conflicts exist, flag them and request a rebase.
 3. **Run all quality checks**:
    - `go build ./...` — builds cleanly
    - `go vet ./...` — no vet errors
    - `go test ./...` — all tests pass (including new tests for the feature)
-4. **Verify the feature works** — read the task description and acceptance criteria, confirm the implementation satisfies each criterion
+4. **Verify the feature works** — read the task file's acceptance criteria and confirm the implementation satisfies each criterion
 5. **Code quality review**:
+   - Use `/simplify` Claude skill / agent
    - Read every changed file in the diff (`gh pr diff`)
    - Check for dead code, unnecessary complexity, or missing error handling
    - Verify naming conventions and code style match the rest of the codebase
    - Ensure no commented-out code was left behind
 6. **Security review**:
+   - Use `/security-review` Claude skill / agent
    - Ensure secrets and tokens are not logged or exposed
    - Check that user input is validated at API/CLI boundaries
    - Flag any command injection risks (e.g. unsanitized input passed to shell)
@@ -121,22 +104,17 @@ Reviewers are spawned by the lead with the PR number and task ID in their prompt
    - Edge cases NOT covered (note whether they should be addressed now or later)
    - Any security concerns
    - Approve, request changes, or comment accordingly
-8. **Clean up the worktree** after review:
-   ```bash
-   cd /path/to/main/checkout
-   git worktree remove ../slack-cli-review-N
-   ```
-9. **Update the task** via `TaskUpdate` with the review outcome
+8. **Return** the verdict and the list of required changes
 
 ## Git Conventions
 
-- The main checkout stays on `main`. Never switch branches here — workers use worktrees.
+- The main checkout stays on `main`. Never switch branches here — builders and reviewers use worktrees.
 - Do `git pull --ff` after every task is completed and merged.
 - Each task branch is based off the latest `main`.
 - Every code change goes through a PR — no direct commits to `main`.
-- Workers commit with messages: `[task-N] <description>`
+- Builders commit with messages: `[task-N] <description>`
 - One logical change per commit — don't bundle unrelated work
-- Workers should `git pull --rebase` before pushing to avoid conflicts
+- Builders should `git pull --rebase` before pushing to avoid conflicts
 
 ## Releases
 
@@ -152,12 +130,12 @@ When upgrading shared dependencies like `cli-kit`, the process is: upgrade, test
 
 ## Important Rules
 
-- **Always fetch before checking task status** — run `git fetch` and `git pull --ff` before answering questions about whether a task is done, what's been merged, or what state the codebase is in. Workers may have merged PRs that your local main doesn't have yet.
+- **Always fetch before checking task status** — run `git fetch` and `git pull --ff` before answering questions about whether a task is done, what's been merged, or what state the codebase is in. PRs from a workflow may have merged that your local main doesn't have yet.
 - **Never modify PROJECT_PROMPT.md** — that's the user's spec
 - **Always read before writing** — understand existing code before changing it
 - **Test everything** — write tests for every task. If ambiguous what kind, ask the user
-- **Small, focused tasks** — each task should be completable in one agent session
-- **Explicit dependencies** — if task B needs task A's output, declare it with `addBlockedBy`
+- **Small, focused tasks** — each task should be completable by one builder agent
+- **Explicit dependencies** — if task B needs task A's output, put B in a later phase and note the dependency in its task file
 - **No premature abstraction** — build what's needed, not what might be needed
 - **Commit early and often** — small atomic commits, not monolithic ones
 - **Always verify with end-to-end tests** — business logic correctness matters, not just code presence
